@@ -1,50 +1,142 @@
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+import warnings
+warnings.filterwarnings("ignore", message=".*chardet or charset_normalizer.*")
+warnings.filterwarnings("ignore", message=".*structure of `inputs` doesn't match.*")
+
 import time
 import random
 import glob
 import sqlite3
+import uuid
+from collections import Counter
 import pandas as pd
 import streamlit as st
 from datetime import datetime
 import plotly.express as px
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras.preprocessing.image import img_to_array
 from PIL import Image
-import matplotlib.cm as cm
+import matplotlib
 
-# ==========================================
-# 0. CONFIGURACIÓN INICIAL Y ESTILO
-# ==========================================
+tf.get_logger().setLevel('ERROR')
+try:
+    import absl.logging
+    absl.logging.set_verbosity(absl.logging.ERROR)
+    absl.logging.set_stderrthreshold('error')
+except ImportError:
+    pass
+
 st.set_page_config(page_title="Planta Industrial IA", page_icon="🏭", layout="wide")
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+st.markdown("""
+<style>
+    /* --- Contenido principal --- */
+    .main .block-container {
+        padding-top: 3.75rem;
+        padding-bottom: 1.5rem;
+    }
+    .main h1 {
+        font-size: 2.4rem !important;
+        margin-bottom: 0.2rem !important;
+    }
+    .main h3 {
+        font-size: 1.8rem !important;
+        margin-bottom: 0.4rem !important;
+        margin-top: 0.4rem !important;
+    }
+    .main div[data-testid="stMarkdownContainer"] p {
+        margin-bottom: 0.4rem;
+        font-size: 1.4rem;
+    }
+    .main [data-testid="stMetric"] {
+        padding: 0.4rem 0.8rem;
+    }
+    .main [data-testid="stMetricValue"] {
+        font-size: 2.2rem;
+    }
+    .main [data-testid="stMetricLabel"] {
+        font-size: 1.1rem;
+    }
+    .main .stAlert {
+        padding: 0.6rem 1.2rem;
+        margin-bottom: 0.6rem;
+        font-size: 1.2rem;
+    }
+    .main hr {
+        margin: 0.6rem 0 !important;
+    }
+    div[data-testid="stImage"] img {
+        max-height: 360px;
+        object-fit: contain;
+    }
+    .main div[data-testid="stImage"] figcaption {
+        font-size: 1.1rem;
+    }
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        padding: 0.6rem;
+    }
+    .main button[data-testid="stBaseButton-secondary"] p,
+    .main label[data-testid="stWidgetLabel"] p {
+        font-size: 1.2rem;
+    }
 
-# Mismo mapeo de clases que en 05_app_despliegue_streamlit / 04_gradcam_autocalibrado
+    /* --- Barra lateral: compacta, independiente del tamaño del contenido principal --- */
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: 2rem;
+        padding-bottom: 1rem;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] {
+        gap: 0.5rem !important;
+    }
+    section[data-testid="stSidebar"] h1 {
+        font-size: 1.3rem !important;
+        margin-bottom: 0.2rem !important;
+    }
+    section[data-testid="stSidebar"] h3 {
+        font-size: 1rem !important;
+        margin-top: 0.3rem !important;
+        margin-bottom: 0.1rem !important;
+    }
+    section[data-testid="stSidebar"] div[data-testid="stMarkdownContainer"] p {
+        font-size: 0.85rem;
+        margin-bottom: 0.1rem;
+    }
+    section[data-testid="stSidebar"] hr {
+        margin: 0.4rem 0 !important;
+    }
+    section[data-testid="stSidebar"] .stAlert {
+        padding: 0.3rem 0.6rem;
+        font-size: 0.8rem;
+    }
+    section[data-testid="stSidebar"] label[data-testid="stWidgetLabel"] p,
+    section[data-testid="stSidebar"] button p,
+    section[data-testid="stSidebar"] div[data-testid="stRadio"] label p,
+    section[data-testid="stSidebar"] div[data-testid="stCaptionContainer"] {
+        font-size: 0.85rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 CLASS_NAMES = {0: 'Crack (Grieta)', 1: 'Hole (Perforación)', 2: 'Normal (Sin defectos)', 3: 'Rust (Óxido)', 4: 'Scratch (Arañazo)'}
-# Mapea el nombre de la subcarpeta del dataset (etiqueta real) al nombre mostrado en pantalla
 FOLDER_TO_CLASS_NAME = {'crack': CLASS_NAMES[0], 'hole': CLASS_NAMES[1], 'normal': CLASS_NAMES[2], 'rust': CLASS_NAMES[3], 'scratch': CLASS_NAMES[4]}
 
-# Los 3 modelos entrenados en 03_entrenamiento_comparativo_tl.ipynb, con la capa
-# convolucional objetivo de Grad-CAM correcta para cada arquitectura.
 MODEL_CONFIGS = {
-    "EfficientNetB0": {"path": "modelo_optimo_efficientnetb0.keras", "last_conv_layer": "top_activation"},
-    "ResNet50": {"path": "modelo_optimo_resnet50.keras", "last_conv_layer": "conv5_block3_out"},
-    "MobileNetV2": {"path": "modelo_optimo_mobilenetv2.keras", "last_conv_layer": "out_relu"},
+    "EfficientNetB0": {"path": os.path.join(BASE_DIR, "models", "modelo_optimo_efficientnetb0.keras"), "last_conv_layer": "top_activation"},
+    "ResNet50": {"path": os.path.join(BASE_DIR, "models", "modelo_optimo_resnet50.keras"), "last_conv_layer": "conv5_block3_out"},
+    "MobileNetV2": {"path": os.path.join(BASE_DIR, "models", "modelo_optimo_mobilenetv2.keras"), "last_conv_layer": "out_relu"},
 }
 TARGET_SIZE = (224, 224)
+DURACION_SIMULACION_SEG = 60 * 60
 
-# Límite de duración de la simulación: se detiene sola al cumplirse este tiempo
-DURACION_SIMULACION_SEG = 10 * 60  # 10 minutos
-
-# Carpeta de piezas "entrantes": imágenes reales de validación (no vistas en entrenamiento)
-DATASET_PATH = os.path.join("..", "industrial_defect_dataset", "val")
-
-DB_FILE = 'produccion_planta.db'
-
-# ==========================================
-# 1. GESTIÓN DE BASE DE DATOS (SQLITE)
-# ==========================================
+DATASET_PATH = os.path.join(BASE_DIR, "data", "sample_images")
+DB_FILE = os.path.join(BASE_DIR, "produccion_planta_tfm.db")
 def init_db():
     """Inicializa la base de datos y crea la tabla si no existe."""
     conn = sqlite3.connect(DB_FILE)
@@ -59,8 +151,7 @@ def init_db():
             estado TEXT
         )
     ''')
-    # Migración: añade las columnas de etiqueta real y modelo usado (necesarias para
-    # calcular falsos positivos/negativos y filtrar por modelo) si la BD es de una versión anterior.
+    # Migración: añade las columnas necesarias si la BD es de una versión anterior
     columnas_existentes = {fila[1] for fila in c.execute("PRAGMA table_info(produccion)").fetchall()}
     if 'clase_real' not in columnas_existentes:
         c.execute("ALTER TABLE produccion ADD COLUMN clase_real TEXT")
@@ -68,28 +159,43 @@ def init_db():
         c.execute("ALTER TABLE produccion ADD COLUMN estado_real TEXT")
     if 'modelo_ia' not in columnas_existentes:
         c.execute("ALTER TABLE produccion ADD COLUMN modelo_ia TEXT")
+    if 'tasa_defectos_objetivo' not in columnas_existentes:
+        c.execute("ALTER TABLE produccion ADD COLUMN tasa_defectos_objetivo REAL")
+    if 'nombre_fichero' not in columnas_existentes:
+        c.execute("ALTER TABLE produccion ADD COLUMN nombre_fichero TEXT")
+    if 'pieza_id' not in columnas_existentes:
+        c.execute("ALTER TABLE produccion ADD COLUMN pieza_id TEXT")
+    if 'estado_consenso' not in columnas_existentes:
+        c.execute("ALTER TABLE produccion ADD COLUMN estado_consenso TEXT")
     conn.commit()
     conn.close()
 
-def insertar_registro(linea, defecto, confianza, estado, clase_real, estado_real, modelo_ia):
-    """Inserta una nueva pieza procesada en la base de datos, junto con su
-    etiqueta real (ground truth del dataset) y el modelo de IA que la clasificó."""
+def insertar_registro(linea, defecto, confianza, estado, clase_real, estado_real, modelo_ia,
+                       tasa_defectos_objetivo, nombre_fichero=None, pieza_id=None, estado_consenso=None):
+    """Registra la predicción del modelo en la base de datos."""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     c.execute('''
-        INSERT INTO produccion (timestamp, linea, defecto, confianza, estado, clase_real, estado_real, modelo_ia)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (timestamp, linea, defecto, confianza, estado, clase_real, estado_real, modelo_ia))
+        INSERT INTO produccion (timestamp, linea, defecto, confianza, estado, clase_real, estado_real,
+                                 modelo_ia, tasa_defectos_objetivo, nombre_fichero, pieza_id, estado_consenso)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (timestamp, linea, defecto, confianza, estado, clase_real, estado_real, modelo_ia,
+          tasa_defectos_objetivo, nombre_fichero, pieza_id, estado_consenso))
     conn.commit()
     conn.close()
 
 def cargar_datos():
-    """Carga los datos de producción en un DataFrame de Pandas."""
+    """Carga los registros de producción desde la base de datos."""
     conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query("SELECT * FROM produccion", conn)
+    df = pd.read_sql_query('''
+        SELECT id, timestamp, linea, defecto, confianza, estado, clase_real, estado_real,
+               modelo_ia, tasa_defectos_objetivo, nombre_fichero, pieza_id, estado_consenso
+        FROM produccion
+    ''', conn)
     conn.close()
     return df
+
 
 def limpiar_base_datos():
     """Borra todos los registros para reiniciar la simulación."""
@@ -99,46 +205,41 @@ def limpiar_base_datos():
     conn.commit()
     conn.close()
 
-# Inicializar DB al arrancar la app
 init_db()
 
-# ==========================================
-# 2. LÓGICA DE SIMULACIÓN Y ESTADO
-# ==========================================
-# Inicializar el estado de las 5 líneas de producción
 if 'lineas' not in st.session_state:
     st.session_state.lineas = {
         i: {
-            # Tiempo aleatorio inicial para la primera pieza (entre 5 y 20 segundos)
             "proximo_procesamiento": time.time() + random.uniform(5, 20),
             "ultimo_resultado": None,
             "piezas_totales": 0
         } for i in range(1, 6)
     }
 
-# Última pieza procesada globalmente (de cualquier línea), la que se muestra en grande
 if 'ultima_pieza_global' not in st.session_state:
     st.session_state.ultima_pieza_global = None
 
-# Instante en que se activó la simulación (None = simulación detenida), para poder pararla sola tras 10 minutos
 if 'tiempo_inicio_simulacion' not in st.session_state:
     st.session_state.tiempo_inicio_simulacion = None
-
-# ==========================================
-# 3. INTERFAZ DE NAVEGACIÓN Y SELECCIÓN DE MODELO (SIDEBAR)
-# ==========================================
 st.sidebar.title("🏭 Navegación MLOps")
 st.sidebar.markdown("Selecciona el módulo a visualizar:")
 pagina = st.sidebar.radio("Módulos", ["Simulador de Planta (En Vivo)", "Dashboard de Resultados", "Inspección Manual (Subir Imagen)"])
 
 st.sidebar.divider()
-st.sidebar.markdown("### 🧠 Modelo de IA")
-nombre_modelo_seleccionado = st.sidebar.selectbox(
-    "Modelo entrenado (Transfer Learning)",
-    list(MODEL_CONFIGS.keys()),
-    help="Los 3 modelos comparados en 03_entrenamiento_comparativo_tl.ipynb. Cambiar de modelo se aplica a la siguiente pieza inspeccionada."
+st.sidebar.caption("🧠 Tanto el Simulador como la Inspección Manual evalúan siempre con "
+                    "los 3 modelos entrenados a la vez (EfficientNetB0, ResNet50, MobileNetV2).")
+
+st.sidebar.divider()
+st.sidebar.markdown("### 🎛️ Simulación")
+tasa_defectos_pct = st.sidebar.slider(
+    "Tasa de defectos objetivo (%)",
+    min_value=5, max_value=70, value=50, step=5,
+    help="Probabilidad de que la siguiente pieza entrante tenga realmente un defecto. "
+         "5-15% simula un entorno de producción real; valores altos (50-70%) fuerzan un "
+         "modo demostración intensivo con más rechazos. Se aplica en tiempo real, a partir "
+         "de la siguiente pieza que procese cada línea."
 )
-config_modelo_activo = MODEL_CONFIGS[nombre_modelo_seleccionado]
+tasa_defectos = tasa_defectos_pct / 100
 
 st.sidebar.divider()
 st.sidebar.markdown("### ⚙️ Administración")
@@ -163,26 +264,60 @@ def load_classification_model(model_path):
         st.info(f"Por favor, asegúrate de que el archivo '{model_path}' esté en la misma carpeta que este script.")
         return None
 
+@st.cache_resource
+def construir_grad_model(nombre_modelo):
+    """Construye UNA SOLA VEZ (cacheado) el sub-modelo de Grad-CAM de `nombre_modelo`: expone
+    a la vez el mapa de activaciones de su última capa convolucional y sus logits (sin softmax)
+    de salida.
+
+    IMPORTANTE: grad_model comparte la MISMA capa final que `modelo` (no es una copia), y Keras
+    relee `layer.activation` en cada forward pass real, no la "congela" al construir el modelo.
+    Por eso aquí NO se restaura la activación tras construir grad_model: si se restaurase,
+    cada llamada posterior a grad_model(...) volvería a aplicar softmax dentro del modelo, y
+    luego el código de fuera aplicaría softmax OTRA VEZ para calcular `confianza` — softmax
+    aplicado dos veces aplana la distribución y falsea la confianza mostrada (la hace bajar
+    muy por debajo del valor real, ej. de ~99% a ~40%). Dejar la activación a None de forma
+    permanente aquí es seguro porque `modelo` solo se usa a través de grad_model en esta app
+    (en ningún sitio se llama a modelo.predict() directamente)."""
+    modelo = modelos_cargados.get(nombre_modelo)
+    if modelo is None:
+        return None
+    last_conv_layer_name = MODEL_CONFIGS[nombre_modelo]["last_conv_layer"]
+    modelo.layers[-1].activation = None
+    grad_model = tf.keras.models.Model(
+        inputs=[modelo.inputs],
+        outputs=[modelo.get_layer(last_conv_layer_name).output, modelo.output]
+    )
+    return grad_model
+
 @st.cache_data
 def listar_imagenes_dataset():
-    """Indexa una sola vez las imágenes reales de validación disponibles como 'piezas entrantes'."""
-    rutas = []
+    """Indexa una sola vez las imágenes reales de validación disponibles como 'piezas entrantes',
+    separadas en dos pools (normales vs. con defecto) según su carpeta (etiqueta real). Esta
+    separación es la que permite al slider de tasa de defectos controlar qué proporción de
+    piezas entrantes son realmente defectuosas."""
+    imagenes_normales, imagenes_defecto = [], []
     for ext in ('*.jpg', '*.jpeg', '*.png'):
-        rutas.extend(glob.glob(os.path.join(DATASET_PATH, "**", ext), recursive=True))
-    return rutas
+        for ruta in glob.glob(os.path.join(DATASET_PATH, "**", ext), recursive=True):
+            carpeta = os.path.basename(os.path.dirname(ruta)).lower()
+            if carpeta == 'normal':
+                imagenes_normales.append(ruta)
+            else:
+                imagenes_defecto.append(ruta)
+    return imagenes_normales, imagenes_defecto
 
-modelo = load_classification_model(config_modelo_activo["path"])
-imagenes_dataset = listar_imagenes_dataset()
+# Tanto el Simulador en Vivo como la Inspección Manual evalúan cada pieza con los 3
+# modelos a la vez (para compararlos sobre exactamente la misma imagen), así que se
+# cargan los 3 de entrada, junto con su grad_model correspondiente (ver construir_grad_model).
+modelos_cargados = {nombre: load_classification_model(cfg["path"]) for nombre, cfg in MODEL_CONFIGS.items()}
+grad_models_cargados = {nombre: construir_grad_model(nombre) for nombre in MODEL_CONFIGS}
+imagenes_normales, imagenes_defecto = listar_imagenes_dataset()
+imagenes_dataset = imagenes_normales + imagenes_defecto
 
-def make_gradcam_heatmap(img_array, model, last_conv_layer_name):
-    """Calcula el mapa de calor matemático de los gradientes (Grad-CAM real)."""
-    model.layers[-1].activation = None
-
-    grad_model = tf.keras.models.Model(
-        inputs=[model.inputs],
-        outputs=[model.get_layer(last_conv_layer_name).output, model.output]
-    )
-
+def make_gradcam_heatmap(img_array, grad_model):
+    """Calcula el mapa de calor matemático de los gradientes (Grad-CAM real) usando un
+    grad_model ya construido de antemano (ver construir_grad_model) — no muta ningún
+    modelo compartido en cada llamada."""
     with tf.GradientTape() as tape:
         last_conv_layer_output, preds = grad_model(img_array)
         pred_index = tf.argmax(preds[0])
@@ -196,8 +331,6 @@ def make_gradcam_heatmap(img_array, model, last_conv_layer_name):
     heatmap = tf.squeeze(heatmap)
     heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
 
-    model.layers[-1].activation = tf.keras.activations.softmax
-
     return heatmap.numpy(), int(pred_index.numpy()), preds[0]
 
 def create_superimposed_image(img_pil, heatmap, alpha=0.5):
@@ -205,7 +338,7 @@ def create_superimposed_image(img_pil, heatmap, alpha=0.5):
     img_array = img_to_array(img_pil)
 
     heatmap = np.uint8(255 * heatmap)
-    jet = cm.get_cmap("jet")
+    jet = matplotlib.colormaps["jet"]
     jet_colors = jet(np.arange(256))[:, :3]
     jet_heatmap = jet_colors[heatmap]
 
@@ -216,34 +349,77 @@ def create_superimposed_image(img_pil, heatmap, alpha=0.5):
     superimposed_img = jet_heatmap * alpha + img_array
     return tf.keras.preprocessing.image.array_to_img(superimposed_img)
 
-def inspeccionar_pieza_real(modelo, last_conv_layer):
-    """Toma una imagen real aleatoria del dataset de validación, la clasifica con
-    el modelo entrenado seleccionado y genera su Grad-CAM real, igual que en
-    05_app_despliegue_streamlit. Como la imagen procede de una carpeta con etiqueta
-    conocida, también se devuelve la clase real (ground truth) para poder auditar
-    falsos positivos/negativos."""
-    img_path = random.choice(imagenes_dataset)
+def preparar_imagen_para_modelo(img_pil):
+    """Redimensiona una imagen PIL a TARGET_SIZE de forma IDÉNTICA para el Simulador y la
+    Inspección Manual. Antes divergían: el Simulador cargaba con `load_img(..., target_size=...)`
+    (interpolación 'nearest' por defecto en Keras) mientras que la Inspección Manual usaba
+    `Image.resize()` directamente (que en Pillow reciente usa 'bicubic' por defecto). Esa
+    diferencia de método de redimensionado puede cambiar sutilmente los píxeles en casos límite
+    y hacer que el mismo fichero dé una predicción distinta según por qué camino se procese —
+    justo el síntoma reportado (falso negativo en el Simulador, resultado distinto al subirla
+    a mano). Se usa 'bilinear' porque es el interpolador por defecto de
+    `image_dataset_from_directory`, la forma habitual de cargar datasets en carpetas como este."""
+    img_resized = img_pil.resize(TARGET_SIZE, Image.Resampling.BILINEAR)
+    img_array = img_to_array(img_resized)
+    img_batch = np.expand_dims(img_array, axis=0)
+    return img_resized, img_batch
+
+def inspeccionar_pieza_multi_modelo(modelos_cargados, tasa_defectos):
+    """Toma UNA imagen real del dataset de validación (sorteada del pool de defectuosas
+    con probabilidad `tasa_defectos` y del pool de normales en caso contrario, ver el
+    slider de la barra lateral) y la evalúa con LOS 3 MODELOS ENTRENADOS a la vez, cada
+    uno con su propio Grad-CAM real sobre esa misma imagen. Así se puede comparar cómo
+    decide cada arquitectura ante exactamente la misma pieza. La decisión de planta
+    (aceptar/rechazar) se toma por consenso: se rechaza si 2 de los 3 modelos rechazan.
+    Como la imagen procede de una carpeta con etiqueta conocida, también se devuelve la
+    clase real (ground truth) para poder auditar falsos positivos/negativos por modelo, y
+    el nombre/ruta del fichero de origen para poder trazar cada registro hasta su imagen
+    original en el dataset."""
+    if imagenes_defecto and (not imagenes_normales or random.random() < tasa_defectos):
+        img_path = random.choice(imagenes_defecto)
+    else:
+        img_path = random.choice(imagenes_normales)
     carpeta_real = os.path.basename(os.path.dirname(img_path)).lower()
     clase_real = FOLDER_TO_CLASS_NAME.get(carpeta_real, carpeta_real)
     estado_real = "Aceptada" if clase_real == 'Normal (Sin defectos)' else "Rechazada (Defecto)"
+    nombre_fichero = os.path.relpath(img_path, DATASET_PATH)  # ej. "crack/crack_0042.jpg", para trazabilidad
 
-    img_original = load_img(img_path, target_size=TARGET_SIZE)
-    img_array = img_to_array(img_original)
-    img_batch = np.expand_dims(img_array, axis=0)
+    img_sin_redimensionar = Image.open(img_path).convert('RGB')
+    img_original, img_batch = preparar_imagen_para_modelo(img_sin_redimensionar)
 
-    heatmap, pred_index, preds = make_gradcam_heatmap(img_batch, modelo, last_conv_layer)
-    confianza = float(tf.nn.softmax(preds)[pred_index]) * 100
-    defecto_predicho = CLASS_NAMES.get(pred_index, f"Clase_{pred_index}")
-    img_gradcam = create_superimposed_image(img_original, heatmap)
+    resultados_por_modelo = {}
+    for nombre_modelo in MODEL_CONFIGS:
+        modelo_obj = modelos_cargados.get(nombre_modelo)
+        grad_model = grad_models_cargados.get(nombre_modelo)
+        if modelo_obj is None or grad_model is None:
+            continue  # este modelo no se pudo cargar (ver error mostrado al arrancar la app)
 
-    return img_original, img_gradcam, defecto_predicho, confianza, clase_real, estado_real
+        heatmap, pred_index, preds = make_gradcam_heatmap(img_batch, grad_model)
+        confianza = float(tf.nn.softmax(preds)[pred_index]) * 100
+        defecto_predicho = CLASS_NAMES.get(pred_index, f"Clase_{pred_index}")
+        estado_pieza = "Aceptada" if defecto_predicho == 'Normal (Sin defectos)' else "Rechazada (Defecto)"
+        img_gradcam = create_superimposed_image(img_original, heatmap)
+
+        resultados_por_modelo[nombre_modelo] = {
+            "defecto": defecto_predicho,
+            "confianza": confianza,
+            "estado": estado_pieza,
+            "imagen_gradcam": img_gradcam,
+        }
+
+    rechazos = sum(1 for r in resultados_por_modelo.values() if r["estado"] == "Rechazada (Defecto)")
+    estado_consenso = "Rechazada (Defecto)" if rechazos >= 2 else "Aceptada"
+
+    return img_original, clase_real, estado_real, resultados_por_modelo, estado_consenso, nombre_fichero
 
 # ==========================================
 # 5. PÁGINA 1: SIMULADOR DE PLANTA EN VIVO
 # ==========================================
 if pagina == "Simulador de Planta (En Vivo)":
-    st.title("🏭 Planta de Producción - Monitor en Vivo")
-    st.markdown(f"Visualización en tiempo real de las 5 líneas de ensamblaje. El modelo **{nombre_modelo_seleccionado}** inspecciona cada pieza de forma automatizada y renderiza su auditoría XAI instantáneamente.")
+    # Cabecera compacta: título + toggle + cronómetro en una sola fila para ahorrar espacio vertical.
+    col_titulo, col_toggle, col_timer = st.columns([2.2, 1.3, 1.3])
+    with col_titulo:
+        st.markdown("### 🏭 Monitor en Vivo · Comparativa de los 3 modelos")
 
     # Si la simulación llevaba encendida más de DURACION_SIMULACION_SEG, se apaga sola
     # ANTES de dibujar el toggle (no se puede tocar st.session_state de un widget ya instanciado).
@@ -254,59 +430,73 @@ if pagina == "Simulador de Planta (En Vivo)":
         st.session_state.tiempo_inicio_simulacion = None
         simulacion_detenida_por_tiempo = True
 
-    simulacion_activa = st.toggle("▶️ Activar Simulación de Líneas de Producción", key="simulacion_activa_widget")
+    with col_toggle:
+        simulacion_activa = st.toggle("▶️ Activar Simulación", key="simulacion_activa_widget")
 
     if simulacion_activa and st.session_state.tiempo_inicio_simulacion is None:
         st.session_state.tiempo_inicio_simulacion = time.time()  # se acaba de activar: arranca el cronómetro
     elif not simulacion_activa:
         st.session_state.tiempo_inicio_simulacion = None
 
-    if simulacion_detenida_por_tiempo:
-        st.info("⏱️ Simulación detenida automáticamente tras 10 minutos.")
-    elif simulacion_activa:
-        restante = max(0, DURACION_SIMULACION_SEG - (time.time() - st.session_state.tiempo_inicio_simulacion))
-        st.caption(f"⏱️ Tiempo restante antes de la parada automática: {int(restante // 60)}:{int(restante % 60):02d}")
+    with col_timer:
+        if simulacion_detenida_por_tiempo:
+            st.caption("⏱️ Detenida automáticamente tras 1 hora.")
+        elif simulacion_activa:
+            restante = max(0, DURACION_SIMULACION_SEG - (time.time() - st.session_state.tiempo_inicio_simulacion))
+            horas_rest, resto_seg = divmod(int(restante), 3600)
+            min_rest, seg_rest = divmod(resto_seg, 60)
+            st.caption(f"⏱️ Parada automática en: {horas_rest}:{min_rest:02d}:{seg_rest:02d}")
 
-    if modelo is None:
-        st.error("No se puede simular: el modelo no se cargó correctamente.")
-    elif not imagenes_dataset:
+    modelos_disponibles = {n: m for n, m in modelos_cargados.items() if m is not None}
+    if not modelos_disponibles:
+        st.error("No se puede simular: ninguno de los 3 modelos se cargó correctamente.")
+    elif len(modelos_disponibles) < len(MODEL_CONFIGS):
+        faltantes = ", ".join(n for n in MODEL_CONFIGS if n not in modelos_disponibles)
+        st.warning(f"Modelo(s) no disponibles (se excluyen de la comparación): {faltantes}")
+    if not imagenes_dataset:
         st.error(f"No se encontraron imágenes en '{DATASET_PATH}'. Verifica la ruta del dataset.")
 
     # Contenedores para las 5 líneas
     columnas_lineas = st.columns(5)
 
     # Evaluar si toca procesar alguna pieza
-    if simulacion_activa and modelo is not None and imagenes_dataset:
+    if simulacion_activa and modelos_disponibles and imagenes_dataset:
         tiempo_actual = time.time()
 
         for i in range(1, 6):
             if tiempo_actual >= st.session_state.lineas[i]["proximo_procesamiento"]:
-                # --- INFERENCIA REAL DE IA SOBRE UNA PIEZA (imagen real del dataset) ---
-                (img_original_pieza, img_gradcam_pieza, defecto_predicho, confianza_prediccion,
-                 clase_real, estado_real) = inspeccionar_pieza_real(modelo, config_modelo_activo["last_conv_layer"])
-                estado_pieza = "Aceptada" if defecto_predicho == 'Normal (Sin defectos)' else "Rechazada (Defecto)"
+                # --- INFERENCIA REAL CON LOS 3 MODELOS SOBRE LA MISMA PIEZA (imagen real del dataset) ---
+                (img_original_pieza, clase_real, estado_real, resultados_modelos,
+                 estado_consenso, nombre_fichero) = inspeccionar_pieza_multi_modelo(modelos_disponibles, tasa_defectos)
 
-                # Guardar en Base de Datos (incluyendo la etiqueta real y el modelo, para auditar FP/FN por modelo)
-                insertar_registro(i, defecto_predicho, confianza_prediccion, estado_pieza, clase_real, estado_real, nombre_modelo_seleccionado)
+                # Guardar en Base de Datos: una fila por modelo (misma pieza, misma línea, mismo timestamp),
+                # con la imagen original, el Grad-CAM de ESE modelo y el fichero de origen, para poder
+                # auditar y comparar cada modelo individualmente en el Dashboard (incluida una revisión
+                # visual manual y la trazabilidad hasta la imagen del dataset). Las 3 filas comparten el
+                # mismo `pieza_id` (para poder contar piezas físicas, no filas) y el mismo
+                # `estado_consenso` (la decisión real de aceptar/rechazar de la planta).
+                pieza_id = str(uuid.uuid4())
+                for nombre_modelo, res in resultados_modelos.items():
+                    insertar_registro(i, res["defecto"], res["confianza"], res["estado"],
+                                       clase_real, estado_real, nombre_modelo, tasa_defectos_pct,
+                                       nombre_fichero, pieza_id, estado_consenso)
 
-                # Actualizar estado de la sesión
+                # Actualizar estado de la sesión (la decisión de planta es el consenso de los 3 modelos)
                 resultado = {
                     "linea": i,
-                    "defecto": defecto_predicho,
-                    "confianza": confianza_prediccion,
-                    "estado": estado_pieza,
+                    "estado": estado_consenso,
                     "hora": datetime.now().strftime("%H:%M:%S"),
                     "clase_real": clase_real,
                     "estado_real": estado_real,
-                    "modelo_ia": nombre_modelo_seleccionado,
                 }
                 st.session_state.lineas[i]["ultimo_resultado"] = resultado
                 st.session_state.lineas[i]["piezas_totales"] += 1
-                # Esta es la última pieza producida en toda la planta: la que se muestra en grande
+                # Esta es la última pieza producida en toda la planta: la que se muestra en grande,
+                # con el detalle de los 3 modelos para poder compararlos.
                 st.session_state.ultima_pieza_global = {
                     **resultado,
                     "imagen_original": img_original_pieza,
-                    "imagen_gradcam": img_gradcam_pieza
+                    "resultados_modelos": resultados_modelos,
                 }
                 # Configurar el tiempo para la SIGUIENTE pieza (aleatorio entre 8 y 20 segs)
                 st.session_state.lineas[i]["proximo_procesamiento"] = tiempo_actual + random.uniform(8, 20)
@@ -314,62 +504,92 @@ if pagina == "Simulador de Planta (En Vivo)":
     # Renderizar UI de las líneas (solo estado y métricas, sin imagen individual)
     for i, col in enumerate(columnas_lineas, 1):
         with col:
-            st.markdown(f"### Línea {i}")
             estado_linea = st.session_state.lineas[i]
+            estado_cinta = "🔄 En movimiento" if simulacion_activa else "⏸️ Detenida"
 
-            st.metric("Total procesadas", estado_linea["piezas_totales"])
-
-            # Caja de estado visual
-            if simulacion_activa:
-                st.info("🔄 Cinta en movimiento...")
-            else:
-                st.warning("⏸️ Cinta detenida")
-
-            # Mostrar último resultado (texto) de esta línea
+            # Mostrar último resultado (texto) de esta línea, todo en una única tarjeta compacta
             if estado_linea["ultimo_resultado"]:
                 res = estado_linea["ultimo_resultado"]
                 color = "green" if res["estado"] == "Aceptada" else "red"
                 st.markdown(f"""
-                <div style="border:1px solid {color}; padding:10px; border-radius:5px; margin-bottom: 10px;">
-                    <strong>Última pieza ({res['hora']}):</strong><br>
-                    <span style="color:{color}; font-weight:bold;">{res['estado']}</span><br>
-                    Defecto: {res['defecto']}<br>
-                    Confianza IA: {res['confianza']:.1f}%
+                <div style="border:1px solid {color}; padding:12px 16px; border-radius:8px; font-size:1.05rem; line-height:1.4;">
+                    <strong>Línea {i}</strong> · {estado_cinta} · Total: {estado_linea['piezas_totales']}<br>
+                    <span style="color:{color}; font-weight:bold;">{res['estado']}</span> ({res['hora']})<br>
+                    Consenso de los 3 modelos
                 </div>
                 """, unsafe_allow_html=True)
             else:
-                st.markdown("<div style='border:1px dashed gray; padding:10px; border-radius:5px; text-align:center;'>Esperando primera pieza...</div>", unsafe_allow_html=True)
-
-    st.divider()
+                st.markdown(f"""
+                <div style="border:1px dashed gray; padding:12px 16px; border-radius:8px; font-size:1.05rem; text-align:center; line-height:1.4;">
+                    <strong>Línea {i}</strong> · {estado_cinta} · Total: {estado_linea['piezas_totales']}<br>
+                    Esperando primera pieza...
+                </div>
+                """, unsafe_allow_html=True)
 
     # ==========================================
-    # Pieza activa: auditoría visual (Original vs Grad-CAM)
+    # Pieza activa: pieza original + comparación de los 3 modelos sobre esa misma
+    # pieza, en 4 tarjetas idénticas en tamaño y estilo (una fila, mismo ancho,
+    # mismo alto de imagen) para que quede alineado y visualmente coherente.
     # ==========================================
-    st.subheader("🔎 Última Pieza Inspeccionada (Auditoría Visual)")
-
     pieza = st.session_state.ultima_pieza_global
     if pieza:
         color = "green" if pieza["estado"] == "Aceptada" else "red"
-        acierto = pieza["defecto"] == pieza["clase_real"]
-        etiqueta_acierto = "✅ Predicción correcta" if acierto else "⚠️ Predicción incorrecta (ver etiqueta real)"
         st.markdown(f"""
-        <div style="border:1px solid {color}; padding:10px; border-radius:5px; margin-bottom: 10px;">
-            <strong>Línea {pieza['linea']} · {pieza['hora']} · Modelo: {pieza['modelo_ia']}:</strong>
-            <span style="color:{color}; font-weight:bold;"> {pieza['estado']}</span><br>
-            Defecto (predicción IA): {pieza['defecto']}<br>
-            Confianza IA: {pieza['confianza']:.1f}%<br>
-            Clase real (dataset): {pieza['clase_real']}<br>
-            {etiqueta_acierto}
+        <div style="border:1px solid {color}; padding:8px 18px; border-radius:8px; font-size:1.15rem; margin-top:0.6rem; white-space:nowrap; overflow-x:auto;">
+            🔎 <strong>Línea {pieza['linea']} · {pieza['hora']}:</strong>
+            Decisión de planta (consenso de los 3 modelos):
+            <span style="color:{color}; font-weight:bold;"> {pieza['estado']}</span>
         </div>
         """, unsafe_allow_html=True)
+        st.caption("Misma pieza evaluada por los 3 modelos · Grad-CAM = zona en la que se ha fijado cada modelo para decidir")
 
-        col_img1, col_img2 = st.columns(2)
-        with col_img1:
-            st.image(pieza["imagen_original"], caption="1. Superficie Original", use_container_width=True)
-        with col_img2:
-            st.image(pieza["imagen_gradcam"], caption="2. Mapa de Activación Grad-CAM (Zona de decisión)", use_container_width=True)
+        GRIS_NEUTRO = "#616161"
+        columnas_pieza = st.columns(1 + len(MODEL_CONFIGS))
+
+        # Las 4 tarjetas usan siempre EXACTAMENTE 3 líneas (nombre / decisión / estado de
+        # acierto), así su altura es idéntica sin importar la longitud del texto de cada una
+        # (ej. "MobileNetV2" + "Rechazada (Defecto)" es más largo que "ResNet50" + "Aceptada"),
+        # y las imágenes de debajo arrancan siempre alineadas en la misma fila.
+        with columnas_pieza[0]:
+            st.markdown(f"""
+            <div style="border:1px solid {GRIS_NEUTRO}; padding:6px 10px; border-radius:6px; font-size:1rem; text-align:center; line-height:1.35; white-space:nowrap; overflow-x:auto;">
+                <strong>📷 Pieza Original</strong><br>
+                <span style="color:{GRIS_NEUTRO}; font-weight:bold;">ENTRADA</span><br>
+                Clase real: {pieza['clase_real']}
+            </div>
+            """, unsafe_allow_html=True)
+            st.image(pieza["imagen_original"], caption="Superficie", width='stretch')
+
+        for col, nombre_modelo in zip(columnas_pieza[1:], MODEL_CONFIGS.keys()):
+            with col:
+                res = pieza["resultados_modelos"].get(nombre_modelo)
+                if res is None:
+                    st.warning(f"{nombre_modelo}: no disponible")
+                    continue
+                acierto = res["defecto"] == pieza["clase_real"]
+                color_m = "green" if res["estado"] == "Aceptada" else "red"
+                # La decisión (verde/rojo) y el acierto son cosas distintas: un modelo puede
+                # "Rechazar" (rojo) y aun así equivocarse de defecto, o "Aceptar" (verde) una
+                # pieza que en realidad es defectuosa. El borde ámbar + la 3ª línea resaltan
+                # el ERROR en sí, independientemente del color de la decisión.
+                if acierto:
+                    borde_tarjeta = f"2px solid {color_m}"
+                    fondo_tarjeta = "transparent"
+                    linea_acierto = '<span style="color:green; font-weight:bold;">✅ Correcto</span>'
+                else:
+                    borde_tarjeta = "3px solid #ff9800"
+                    fondo_tarjeta = "rgba(255,152,0,0.12)"
+                    linea_acierto = '<span style="color:#e65100; font-weight:bold;">⚠️ ERROR</span>'
+                st.markdown(f"""
+                <div style="border:{borde_tarjeta}; background:{fondo_tarjeta}; padding:6px 10px; border-radius:6px; font-size:1rem; text-align:center; line-height:1.35; white-space:nowrap; overflow-x:auto;">
+                    <strong>🧠 {nombre_modelo}</strong><br>
+                    <span style="color:{color_m}; font-weight:bold;">{res['estado']}</span> · {res['defecto']} ({res['confianza']:.1f}%)<br>
+                    {linea_acierto}
+                </div>
+                """, unsafe_allow_html=True)
+                st.image(res["imagen_gradcam"], caption="Grad-CAM", width='stretch')
     else:
-        st.markdown("<div style='border:1px dashed gray; padding:20px; border-radius:5px; text-align:center;'>Esperando la primera pieza de cualquier línea...</div>", unsafe_allow_html=True)
+        st.markdown("<div style='border:1px dashed gray; padding:28px; border-radius:8px; text-align:center; font-size:1.5rem; margin-top:0.6rem;'>Esperando la primera pieza de cualquier línea...</div>", unsafe_allow_html=True)
 
     # Bucle de refresco automático si la simulación está activa
     if simulacion_activa:
@@ -387,6 +607,10 @@ elif pagina == "Dashboard de Resultados":
     if df.empty:
         st.info("La base de datos está vacía. Ve al 'Simulador de Planta' y activa la producción para generar datos.")
     else:
+        # Copia sin filtrar por modelo, para poder mostrar más abajo una comparativa directa
+        # entre los 3 modelos sin depender de qué opción tenga seleccionada el desplegable.
+        df_sin_filtrar = df.copy()
+
         # Filtro por modelo de IA: cada modelo puede tener una fiabilidad distinta,
         # así que las métricas no deben mezclar piezas inspeccionadas por modelos diferentes.
         modelos_en_bd = sorted(df['modelo_ia'].dropna().unique().tolist())
@@ -397,24 +621,59 @@ elif pagina == "Dashboard de Resultados":
         # 6.1. KPIs (Key Performance Indicators) Principales
         st.subheader("Indicadores Globales")
         col1, col2, col3, col4 = st.columns(4)
-        
-        total_piezas = len(df)
-        piezas_rechazadas = len(df[df['estado'].str.contains("Rechazada")])
+
+        # Cada pieza genera 3 filas (una por modelo evaluado): hay que deduplicar por
+        # pieza_id para contar piezas físicas de verdad, no filas. La decisión de aceptar/
+        # rechazar a nivel de planta es el consenso guardado (estado_consenso), no el
+        # 'estado' de un modelo concreto (que puede diferir de los otros dos).
+        df_piezas = df.dropna(subset=['pieza_id']).drop_duplicates(subset='pieza_id')
+
+        total_piezas = len(df_piezas)
+        piezas_rechazadas = len(df_piezas[df_piezas['estado_consenso'].str.contains("Rechazada", na=False)])
         porcentaje_rechazo = (piezas_rechazadas / total_piezas) * 100 if total_piezas > 0 else 0
-        
-        # Encontrar la línea con más rechazos
-        rechazos_por_linea = df[df['estado'].str.contains("Rechazada")]['linea'].value_counts()
+
+        # Encontrar la línea con más rechazos (a nivel de planta, por consenso)
+        rechazos_por_linea = df_piezas[df_piezas['estado_consenso'].str.contains("Rechazada", na=False)]['linea'].value_counts()
         linea_problematica = rechazos_por_linea.idxmax() if not rechazos_por_linea.empty else "N/A"
-        
+
         col1.metric("Total Piezas Analizadas", total_piezas)
         col2.metric("Piezas Rechazadas", piezas_rechazadas)
         col3.metric("Tasa de Defectos", f"{porcentaje_rechazo:.1f}%")
         col4.metric("Línea con más fallos", f"Línea {linea_problematica}")
+        st.caption(f"({len(df)} filas de evaluación individual por modelo en la BD para estas {total_piezas} piezas)")
 
         # 6.1.bis Fiabilidad del modelo: Falsos Positivos y Falsos Negativos
         # (comparando la predicción de la IA contra la etiqueta real del dataset)
         df_auditado = df.dropna(subset=['estado_real'])
         st.markdown("#### Fiabilidad del Modelo (predicción IA vs. etiqueta real)")
+
+        # Comparativa directa entre los 3 modelos, SIEMPRE sobre el total de piezas (independiente
+        # de la opción elegida en "Filtrar por modelo de IA" de arriba) — para poder ver de un
+        # vistazo qué modelo falla más sin tener que ir alternando el desplegable uno a uno.
+        df_auditado_todos = df_sin_filtrar.dropna(subset=['estado_real'])
+        if not df_auditado_todos.empty:
+            filas_comparativa = []
+            for nombre_m in sorted(df_auditado_todos['modelo_ia'].dropna().unique()):
+                d = df_auditado_todos[df_auditado_todos['modelo_ia'] == nombre_m]
+                fp_m = len(d[(d['estado_real'] == 'Aceptada') & (d['estado'] == 'Rechazada (Defecto)')])
+                fn_m = len(d[(d['estado_real'] == 'Rechazada (Defecto)') & (d['estado'] == 'Aceptada')])
+                # Error de Clasificación: acertó que había defecto (mismo estado binario que la
+                # realidad), pero confundió DE QUÉ defecto se trataba (ej. real Crack, predijo
+                # Scratch). No es FP ni FN porque el binario Aceptada/Rechazada coincide.
+                ec_m = len(d[(d['estado_real'] == 'Rechazada (Defecto)') & (d['estado'] == 'Rechazada (Defecto)') & (d['defecto'] != d['clase_real'])])
+                filas_comparativa.append({
+                    "Modelo": nombre_m,
+                    "Piezas evaluadas": len(d),
+                    "Falsos Positivos": fp_m,
+                    "Falsos Negativos": fn_m,
+                    "Errores de Clasificación": ec_m,
+                    "Total errores": fp_m + fn_m + ec_m,
+                    "Tasa de error (%)": round((fp_m + fn_m + ec_m) / len(d) * 100, 1) if len(d) > 0 else 0,
+                })
+            df_comparativa = pd.DataFrame(filas_comparativa).sort_values("Total errores", ascending=False)
+            st.markdown("###### 📊 Comparativa de fiabilidad por modelo (todas las piezas, sin filtrar)")
+            st.dataframe(df_comparativa, width='stretch', hide_index=True)
+
         if df_auditado.empty:
             st.info("Aún no hay piezas con etiqueta real registrada. Procesa piezas nuevas en el simulador para calcular estos indicadores.")
         else:
@@ -423,31 +682,40 @@ elif pagina == "Dashboard de Resultados":
 
             falsos_positivos = len(df_auditado[(df_auditado['estado_real'] == 'Aceptada') & (df_auditado['estado'] == 'Rechazada (Defecto)')])
             falsos_negativos = len(df_auditado[(df_auditado['estado_real'] == 'Rechazada (Defecto)') & (df_auditado['estado'] == 'Aceptada')])
+            # Error de Clasificación: acertó el binario Aceptada/Rechazada (detectó que había
+            # defecto), pero confundió DE QUÉ defecto se trataba (ej. real Crack, predijo
+            # Scratch). Antes esto no se contaba en ningún sitio porque FP/FN solo miran el
+            # binario, no la clase exacta.
+            errores_clasificacion = len(df_auditado[(df_auditado['estado_real'] == 'Rechazada (Defecto)') & (df_auditado['estado'] == 'Rechazada (Defecto)') & (df_auditado['defecto'] != df_auditado['clase_real'])])
 
             tasa_fp = (falsos_positivos / piezas_sanas_reales * 100) if piezas_sanas_reales > 0 else 0
             tasa_fn = (falsos_negativos / piezas_defecto_reales * 100) if piezas_defecto_reales > 0 else 0
+            tasa_ec = (errores_clasificacion / piezas_defecto_reales * 100) if piezas_defecto_reales > 0 else 0
 
-            col_fp, col_fn = st.columns(2)
+            col_fp, col_fn, col_ec = st.columns(3)
             col_fp.metric("Falsos Positivos", falsos_positivos, delta=f"{tasa_fp:.1f}% de piezas sanas", delta_color="off",
                           help="Piezas realmente SIN defecto que la IA rechazó por error (falsa alarma).")
             col_fn.metric("Falsos Negativos", falsos_negativos, delta=f"{tasa_fn:.1f}% de piezas defectuosas", delta_color="off",
                           help="Piezas realmente CON defecto que la IA aceptó por error (el caso más crítico: un defecto se cuela en producción).")
+            col_ec.metric("Errores de Clasificación", errores_clasificacion, delta=f"{tasa_ec:.1f}% de piezas defectuosas", delta_color="off",
+                          help="Piezas realmente defectuosas que la IA rechazó correctamente, pero confundiendo de qué defecto se trataba (ej. predijo Arañazo siendo en realidad Grieta).")
 
             # --- Desglose detallado: exactamente qué tipos de pieza confunde el modelo ---
             df_fp = df_auditado[(df_auditado['estado_real'] == 'Aceptada') & (df_auditado['estado'] == 'Rechazada (Defecto)')]
             df_fn = df_auditado[(df_auditado['estado_real'] == 'Rechazada (Defecto)') & (df_auditado['estado'] == 'Aceptada')]
+            df_ec = df_auditado[(df_auditado['estado_real'] == 'Rechazada (Defecto)') & (df_auditado['estado'] == 'Rechazada (Defecto)') & (df_auditado['defecto'] != df_auditado['clase_real'])]
 
-            if falsos_positivos > 0 or falsos_negativos > 0:
+            if falsos_positivos > 0 or falsos_negativos > 0 or errores_clasificacion > 0:
                 st.markdown("##### 🔬 Desglose detallado de errores por tipo de pieza")
 
-                col_graf_fn, col_graf_fp = st.columns(2)
+                col_graf_fn, col_graf_fp, col_graf_ec = st.columns(3)
                 with col_graf_fn:
                     st.caption("Falsos Negativos: qué defecto real se le coló a la IA")
                     if not df_fn.empty:
                         conteo_fn = df_fn['clase_real'].value_counts().rename_axis('Tipo de defecto real').reset_index(name='Veces no detectado')
                         fig_fn = px.bar(conteo_fn, x='Tipo de defecto real', y='Veces no detectado',
                                         color_discrete_sequence=['#d62728'])
-                        st.plotly_chart(fig_fn, use_container_width=True)
+                        st.plotly_chart(fig_fn, width='stretch')
                     else:
                         st.write("Sin falsos negativos con los filtros actuales.")
                 with col_graf_fp:
@@ -456,108 +724,227 @@ elif pagina == "Dashboard de Resultados":
                         conteo_fp = df_fp['defecto'].value_counts().rename_axis('Defecto predicho por error').reset_index(name='Veces')
                         fig_fp = px.bar(conteo_fp, x='Defecto predicho por error', y='Veces',
                                         color_discrete_sequence=['#ff7f0e'])
-                        st.plotly_chart(fig_fp, use_container_width=True)
+                        st.plotly_chart(fig_fp, width='stretch')
                     else:
                         st.write("Sin falsos positivos con los filtros actuales.")
+                with col_graf_ec:
+                    st.caption("Errores de Clasificación: qué defecto real confunde más de tipo")
+                    if not df_ec.empty:
+                        conteo_ec = df_ec['clase_real'].value_counts().rename_axis('Tipo de defecto real').reset_index(name='Veces confundido')
+                        fig_ec = px.bar(conteo_ec, x='Tipo de defecto real', y='Veces confundido',
+                                        color_discrete_sequence=['#9467bd'])
+                        st.plotly_chart(fig_ec, width='stretch')
+                    else:
+                        st.write("Sin errores de clasificación con los filtros actuales.")
 
                 tipo_error_filtro = st.radio(
                     "Ver registros individuales de:",
-                    ["Ambos", "Solo Falsos Positivos", "Solo Falsos Negativos"],
+                    ["Todos", "Solo Falsos Positivos", "Solo Falsos Negativos", "Solo Errores de Clasificación"],
                     horizontal=True
                 )
                 if tipo_error_filtro == "Solo Falsos Positivos":
                     df_errores = df_fp.copy()
                 elif tipo_error_filtro == "Solo Falsos Negativos":
                     df_errores = df_fn.copy()
+                elif tipo_error_filtro == "Solo Errores de Clasificación":
+                    df_errores = df_ec.copy()
                 else:
-                    df_errores = pd.concat([df_fp, df_fn]).copy()
+                    df_errores = pd.concat([df_fp, df_fn, df_ec]).copy()
 
                 if df_errores.empty:
                     st.success("No hay errores de este tipo con los filtros actuales.")
                 else:
-                    df_errores['tipo_error'] = np.where(df_errores['estado_real'] == 'Aceptada', 'Falso Positivo', 'Falso Negativo')
-                    columnas_mostrar = ['timestamp', 'linea', 'modelo_ia', 'tipo_error', 'clase_real', 'defecto', 'confianza']
-                    st.dataframe(df_errores[columnas_mostrar].sort_values(by='timestamp', ascending=False), use_container_width=True)
+                    condiciones_tipo_error = [
+                        df_errores['estado_real'] == 'Aceptada',
+                        (df_errores['estado_real'] == 'Rechazada (Defecto)') & (df_errores['estado'] == 'Aceptada'),
+                    ]
+                    df_errores['tipo_error'] = np.select(
+                        condiciones_tipo_error, ['Falso Positivo', 'Falso Negativo'],
+                        default='Error de Clasificación'
+                    )
+                    columnas_mostrar = ['id', 'timestamp', 'linea', 'modelo_ia', 'tipo_error', 'clase_real', 'defecto', 'confianza', 'nombre_fichero']
+                    df_errores_mostrar = df_errores[columnas_mostrar].sort_values(by='timestamp', ascending=False)
+                    st.dataframe(df_errores_mostrar, width='stretch')
+
+                    st.caption("ℹ️ Las imágenes no se guardan en la base de datos para optimizar el almacenamiento. Los errores se identifican por: timestamp, línea, modelo, tipo de error, clase real vs. predicha y fichero de origen.")
 
         st.divider()
-        
+
+        # 6.1.ter Tasa de Rechazo Real vs. Tasa de Defectos Objetivo (slider de la barra lateral)
+        st.markdown("#### 🎯 Tasa de Rechazo Real vs. Tasa de Defectos Objetivo (Slider)")
+        st.caption("Para cada valor configurado en el slider 'Tasa de defectos objetivo', compara qué "
+                   "porcentaje de piezas eran realmente defectuosas (ground truth del dataset) frente al "
+                   "porcentaje que el modelo de IA acabó rechazando (incluye sus falsos positivos/negativos).")
+
+        df_tasa = df.dropna(subset=['tasa_defectos_objetivo'])
+        if df_tasa.empty:
+            st.info("Aún no hay piezas registradas con una tasa de defectos objetivo asociada (funcionalidad "
+                     "añadida recientemente). Genera piezas nuevas en el simulador para ver esta comparación.")
+        else:
+            # OJO: esto agrupa filas de evaluación (una por modelo), no piezas físicas — con
+            # "Todos los modelos" seleccionado hay 3 filas por pieza. Se llama "Evaluaciones"
+            # a propósito (no "Piezas") para no dar la impresión de que hay 3 veces más piezas
+            # de las que realmente pasaron por la planta.
+            resumen_tasa = df_tasa.groupby('tasa_defectos_objetivo').agg(
+                Evaluaciones=('id', 'count'),
+                **{'Piezas realmente defectuosas (ground truth)': ('estado_real', lambda s: (s == 'Rechazada (Defecto)').mean() * 100)},
+                **{'Piezas rechazadas por la IA': ('estado', lambda s: (s == 'Rechazada (Defecto)').mean() * 100)}
+            ).reset_index().rename(columns={'tasa_defectos_objetivo': 'Tasa objetivo (%)'})
+            resumen_tasa = resumen_tasa.sort_values('Tasa objetivo (%)')
+
+            df_tasa_melt = resumen_tasa.melt(
+                id_vars=['Tasa objetivo (%)', 'Evaluaciones'],
+                value_vars=['Piezas realmente defectuosas (ground truth)', 'Piezas rechazadas por la IA'],
+                var_name='Serie', value_name='Porcentaje (%)'
+            )
+
+            fig_tasa = px.bar(
+                df_tasa_melt, x='Tasa objetivo (%)', y='Porcentaje (%)', color='Serie', barmode='group',
+                color_discrete_map={
+                    'Piezas realmente defectuosas (ground truth)': '#1f77b4',
+                    'Piezas rechazadas por la IA': '#d62728'
+                }
+            )
+            fig_tasa.add_scatter(
+                x=resumen_tasa['Tasa objetivo (%)'], y=resumen_tasa['Tasa objetivo (%)'],
+                mode='lines+markers', name='Objetivo (y = x)', line=dict(color='gray', dash='dash')
+            )
+            fig_tasa.update_layout(xaxis_title='Tasa de defectos objetivo configurada (%)',
+                                    yaxis_title='Porcentaje observado (%)')
+            st.plotly_chart(fig_tasa, width='stretch')
+            st.caption("Número de evaluaciones registradas por cada tasa objetivo (una por modelo, no por pieza física): " +
+                       ", ".join(f"{int(r['Tasa objetivo (%)'])}% → {int(r['Evaluaciones'])} evaluaciones" for _, r in resumen_tasa.iterrows()))
+
+        st.divider()
+
         # 6.2. Gráficos Analíticos (Plotly)
         col_graf1, col_graf2 = st.columns(2)
         
         with col_graf1:
-            # Gráfico de Torta: Distribución de tipos de defectos
-            st.markdown("#### Distribución de Anomalías")
-            df_defectos = df[df['defecto'] != 'Normal (Sin defectos)']
+            # Gráfico de Torta: Distribución de tipos de defectos REALES (ground truth) por
+            # pieza física, deduplicando por pieza_id — usa clase_real, no la predicción de un
+            # modelo, para que no se triplique el conteo (antes contaba una vez por cada una
+            # de las 3 filas de evaluación de la misma pieza).
+            st.markdown("#### Distribución de Anomalías (piezas reales)")
+            df_defectos = df_piezas[df_piezas['clase_real'] != 'Normal (Sin defectos)']
             if not df_defectos.empty:
-                fig_pie = px.pie(df_defectos, names='defecto', hole=0.4, 
+                fig_pie = px.pie(df_defectos, names='clase_real', hole=0.4,
                                  color_discrete_sequence=px.colors.qualitative.Pastel)
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(fig_pie, width='stretch')
             else:
                 st.write("Aún no se han detectado defectos.")
                 
         with col_graf2:
-            # Gráfico de Barras: Aceptadas vs Rechazadas por Línea
+            # Gráfico de Barras: Aceptadas vs Rechazadas por Línea, por PIEZA física (consenso
+            # de planta), no por fila de evaluación de un modelo — si no, saldrían triplicadas.
             st.markdown("#### Rendimiento por Línea de Producción")
-            fig_bar = px.histogram(df, x="linea", color="estado", barmode="group",
-                                   category_orders={"estado": ["Aceptada", "Rechazada (Defecto)"]},
+            fig_bar = px.histogram(df_piezas, x="linea", color="estado_consenso", barmode="group",
+                                   category_orders={"estado_consenso": ["Aceptada", "Rechazada (Defecto)"]},
                                    color_discrete_map={"Aceptada": "green", "Rechazada (Defecto)": "red"})
             fig_bar.update_layout(xaxis_title="Número de Línea", yaxis_title="Cantidad de Piezas")
-            st.plotly_chart(fig_bar, use_container_width=True)
-            
+            st.plotly_chart(fig_bar, width='stretch')
+
         # 6.3. Tabla de Datos Crudos
         st.subheader("Registro Histórico de Auditoría")
+        st.caption("Cada fila es la evaluación de UN modelo sobre una pieza (3 filas por pieza física, "
+                   "agrupadas por 'pieza_id'); el campo 'estado' es la decisión de ESE modelo, mientras "
+                   "que 'estado_consenso' es la decisión real de la planta (mayoría de los 3).")
         # Mostrar los últimos 100 registros ordenados por el más reciente
-        st.dataframe(df.sort_values(by="id", ascending=False).head(100), use_container_width=True)
+        st.dataframe(df.sort_values(by="id", ascending=False).head(100), width='stretch')
+
+        st.markdown("#### 📋 Nota sobre almacenamiento")
+        st.info("ℹ️ Las imágenes no se guardan en la base de datos para optimizar el almacenamiento. Los datos registrados incluyen: timestamp, línea, predicción, confianza, clase real, modelo utilizado y fichero de origen para trazabilidad.")
 
 # ==========================================
 # 7. PÁGINA 3: INSPECCIÓN MANUAL (idéntico a 05_app_despliegue_streamlit, integrado en la app)
 # ==========================================
 elif pagina == "Inspección Manual (Subir Imagen)":
     st.title("🔍 Inspección Manual de Piezas")
-    st.markdown(f"Sube una imagen de una superficie metálica para evaluarla con el modelo **{nombre_modelo_seleccionado}** (seleccionable en la barra lateral). "
-                "El sistema generará una auditoría visual explicando su decisión, igual que en 05_app_despliegue_streamlit.")
+    st.markdown("Sube una imagen de una superficie metálica y se evaluará con **los 3 modelos entrenados a la vez** "
+                "(igual que en el Simulador en Vivo), para comparar cómo decide cada arquitectura ante la misma pieza.")
 
-    if modelo is None:
-        st.error("No se puede inspeccionar: el modelo no se cargó correctamente.")
+    modelos_disponibles_manual = {n: m for n, m in modelos_cargados.items() if m is not None}
+    if not modelos_disponibles_manual:
+        st.error("No se puede inspeccionar: ninguno de los 3 modelos se cargó correctamente.")
     else:
         uploaded_file = st.file_uploader("Cargar imagen de inspección (JPG/PNG)...", type=["jpg", "jpeg", "png"])
 
         if uploaded_file is not None:
             imagen_subida = Image.open(uploaded_file).convert('RGB')
-            st.sidebar.image(imagen_subida, caption="Imagen de entrada original", use_container_width=True)
+            st.sidebar.image(imagen_subida, caption="Imagen de entrada original", width='stretch')
 
-            img_resized = imagen_subida.resize(TARGET_SIZE)
-            img_array = img_to_array(img_resized)
-            img_batch = np.expand_dims(img_array, axis=0)
+            img_resized, img_batch = preparar_imagen_para_modelo(imagen_subida)
 
-            with st.spinner('Analizando topología superficial...'):
+            with st.spinner('Analizando topología superficial con los 3 modelos...'):
                 try:
-                    # Inferencia pura (con la activación softmax intacta) para la confianza mostrada
-                    preds_completas = modelo.predict(img_batch)
-                    pred_index_softmax = int(np.argmax(preds_completas[0]))
-                    confianza_softmax = float(preds_completas[0][pred_index_softmax]) * 100
+                    # --- INFERENCIA REAL CON LOS 3 MODELOS SOBRE LA MISMA IMAGEN SUBIDA ---
+                    resultados_manual = {}
+                    for nombre_modelo in MODEL_CONFIGS:
+                        modelo_obj = modelos_disponibles_manual.get(nombre_modelo)
+                        grad_model = grad_models_cargados.get(nombre_modelo)
+                        if modelo_obj is None or grad_model is None:
+                            continue
+                        heatmap, pred_index, preds = make_gradcam_heatmap(img_batch, grad_model)
+                        confianza = float(tf.nn.softmax(preds)[pred_index]) * 100
+                        defecto_predicho = CLASS_NAMES.get(pred_index, f"Clase_{pred_index}")
+                        img_xai = create_superimposed_image(img_resized, heatmap)
+                        resultados_manual[nombre_modelo] = {
+                            "defecto": defecto_predicho,
+                            "confianza": confianza,
+                            "imagen_gradcam": img_xai,
+                        }
 
-                    # Grad-CAM real sobre la misma imagen
-                    heatmap, _, _ = make_gradcam_heatmap(img_batch, modelo, config_modelo_activo["last_conv_layer"])
-                    img_xai = create_superimposed_image(img_resized, heatmap)
+                    # Como aquí no hay etiqueta real (es una imagen subida por el usuario, sin ground
+                    # truth), en vez de marcar "acierto/error" se marca "coincide/discrepa con la
+                    # mayoría de los 3 modelos" — el mismo lenguaje visual que en el Simulador.
+                    conteo_clases = Counter(r["defecto"] for r in resultados_manual.values())
+                    clase_mayoritaria, votos_mayoria = conteo_clases.most_common(1)[0]
+                    hay_unanimidad = votos_mayoria == len(resultados_manual)
 
-                    st.subheader("Resultados de la Auditoría")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Clasificación Principal", CLASS_NAMES.get(pred_index_softmax, f"Clase_{pred_index_softmax}"))
-                    with col2:
-                        st.metric("Confianza del Modelo", f"{confianza_softmax:.2f} %")
+                    st.subheader("Resultados de la Auditoría (comparativa de los 3 modelos)")
+                    if hay_unanimidad:
+                        st.success(f"✅ Los 3 modelos coinciden: **{clase_mayoritaria}**")
+                    else:
+                        st.warning(f"⚠️ Los modelos no coinciden entre sí. Mayoría ({votos_mayoria}/{len(resultados_manual)}): **{clase_mayoritaria}**")
 
-                    st.markdown("### 🔎 Inspección por Rayos X (Grad-CAM)")
-                    col_img1, col_img2 = st.columns(2)
-                    with col_img1:
-                        st.image(imagen_subida, caption="1. Superficie Original", use_container_width=True)
-                    with col_img2:
-                        st.image(img_xai, caption="2. Mapa de Activación (Zona de decisión)", use_container_width=True)
+                    GRIS_NEUTRO = "#616161"
+                    columnas_manual = st.columns(1 + len(MODEL_CONFIGS))
 
-                    st.markdown("### 📊 Desglose de Probabilidades (Capa Softmax)")
-                    probs_dict = {CLASS_NAMES[i]: float(preds_completas[0][i]) * 100 for i in range(len(CLASS_NAMES))}
-                    st.bar_chart(probs_dict)
+                    with columnas_manual[0]:
+                        st.markdown(f"""
+                        <div style="border:1px solid {GRIS_NEUTRO}; padding:6px 10px; border-radius:6px; font-size:1rem; text-align:center; line-height:1.35; white-space:nowrap; overflow-x:auto;">
+                            <strong>📷 Imagen Subida</strong><br>
+                            <span style="color:{GRIS_NEUTRO}; font-weight:bold;">ENTRADA</span><br>
+                            Mayoría: {clase_mayoritaria}
+                        </div>
+                        """, unsafe_allow_html=True)
+                        st.image(imagen_subida, caption="Superficie", width='stretch')
+
+                    for col, nombre_modelo in zip(columnas_manual[1:], MODEL_CONFIGS.keys()):
+                        with col:
+                            res = resultados_manual.get(nombre_modelo)
+                            if res is None:
+                                st.warning(f"{nombre_modelo}: no disponible")
+                                continue
+                            estado_modelo = "Aceptada" if res["defecto"] == 'Normal (Sin defectos)' else "Rechazada (Defecto)"
+                            color_m = "green" if estado_modelo == "Aceptada" else "red"
+                            de_acuerdo = res["defecto"] == clase_mayoritaria
+                            if de_acuerdo:
+                                borde_tarjeta = f"2px solid {color_m}"
+                                fondo_tarjeta = "transparent"
+                                linea_consenso = '<span style="color:green; font-weight:bold;">✅ Coincide</span>'
+                            else:
+                                borde_tarjeta = "3px solid #ff9800"
+                                fondo_tarjeta = "rgba(255,152,0,0.12)"
+                                linea_consenso = '<span style="color:#e65100; font-weight:bold;">⚠️ Discrepa</span>'
+                            st.markdown(f"""
+                            <div style="border:{borde_tarjeta}; background:{fondo_tarjeta}; padding:6px 10px; border-radius:6px; font-size:1rem; text-align:center; line-height:1.35; white-space:nowrap; overflow-x:auto;">
+                                <strong>🧠 {nombre_modelo}</strong><br>
+                                <span style="color:{color_m}; font-weight:bold;">{estado_modelo}</span> · {res['defecto']} ({res['confianza']:.1f}%)<br>
+                                {linea_consenso}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            st.image(res["imagen_gradcam"], caption="Grad-CAM", width='stretch')
                 except Exception as e:
                     st.error(f"Error durante el análisis: {e}")
         else:

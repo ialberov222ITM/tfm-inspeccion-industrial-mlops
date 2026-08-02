@@ -1,9 +1,6 @@
 import os
 import warnings
 
-# ==========================================
-# 0. BLOQUE SILENCIADOR DE CONSOLA
-# ==========================================
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 warnings.filterwarnings("ignore")
@@ -16,12 +13,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 
-# Modo silencioso para no colapsar la memoria gráfica
 matplotlib.use('Agg')
 
-# ==========================================
-# 1. FUNCIONES CORE DE GRAD-CAM Y VISUALIZACIÓN
-# ==========================================
 def make_gradcam_heatmap(img_array, model, last_conv_layer_name, pred_index=None):
     grad_model = tf.keras.models.Model(
         inputs=[model.inputs], 
@@ -45,7 +38,7 @@ def make_gradcam_heatmap(img_array, model, last_conv_layer_name, pred_index=None
     return heatmap.numpy(), pred_index, preds[0]
 
 def get_superimposed_img(img_path, heatmap, alpha=0.4):
-    """Genera la imagen superpuesta en crudo sin plotearla para usarla en cuadrículas."""
+    """Superpone el mapa de calor sobre la imagen original."""
     img = load_img(img_path)
     img_res = img_to_array(img)
 
@@ -61,13 +54,7 @@ def get_superimposed_img(img_path, heatmap, alpha=0.4):
     superimposed_img = jet_heatmap * alpha + img_res
     return tf.keras.preprocessing.image.array_to_img(superimposed_img)
 
-# ==========================================
-# 2. CONFIGURACIÓN DEL ENTORNO Y MODELOS
-# ==========================================
-# Calculamos la ruta raíz dinámicamente multiplataforma
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Apuntamos a las carpetas relativas del repositorio
 DATASET_PATH = os.path.join(BASE_DIR, "data", "sample_images")
 BASE_OUTPUT_DIR = os.path.join(BASE_DIR, "results", "reporte_gradcam")
 
@@ -79,13 +66,10 @@ MODELOS_CONFIG = [
     {"nombre": "EfficientNetB0", "ruta": os.path.join(BASE_DIR, "models", "modelo_optimo_efficientnetb0.keras"), "capa_conv": "top_activation"}
 ]
 
-# ==========================================
-# 3. SELECCIÓN DE IMÁGENES Y CARGA DE MODELOS
-# ==========================================
 if __name__ == "__main__":
     os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
 
-    print("[INFO] Cargando los 3 modelos en memoria RAM simultáneamente...")
+    print("[INFO] Cargando los 3 modelos entrenados...")
     modelos_cargados = []
     for config in MODELOS_CONFIG:
         if os.path.exists(config["ruta"]):
@@ -108,70 +92,61 @@ if __name__ == "__main__":
         else:
             print(f"  [ERROR] No se encontró {config['ruta']}")
 
-    print("\n[INFO] Escaneando dataset para seleccionar las 50 imágenes maestras...")
+    print("\n[INFO] Seleccionando imágenes del dataset...")
     all_images = []
     extensions = ['*.jpg', '*.jpeg', '*.png']
     for ext in extensions:
         all_images.extend(glob.glob(os.path.join(DATASET_PATH, "**", ext), recursive=True))
-        
+
     random.seed(42)
-    all_images.sort() 
+    all_images.sort()
     num_samples = min(50, len(all_images))
     selected_images = random.sample(all_images, num_samples)
-    print(f"[INFO] Batería de {num_samples} imágenes fijada.\n")
+    print(f"[INFO] Se procesarán {num_samples} imágenes.\n")
 
-    # ==========================================
-    # 4. PROCESAMIENTO UNIFICADO EN CUADRÍCULA (1x4)
-    # ==========================================
     exitos = 0
     for i, img_path in enumerate(selected_images):
         class_real = os.path.basename(os.path.dirname(img_path))
         img_name = os.path.basename(img_path)
-        
+
         class_output_dir = os.path.join(BASE_OUTPUT_DIR, class_real)
         os.makedirs(class_output_dir, exist_ok=True)
-        
-        # Crear la figura contenedora de 1 fila y 4 columnas
+
         fig, axes = plt.subplots(1, 4, figsize=(24, 6))
-        
-        # 4.1 Mostrar la imagen original en el primer panel
+
         img_original = load_img(img_path)
         axes[0].imshow(img_original)
         axes[0].set_title(f"Original ({class_real})", fontsize=16, fontweight='bold')
         axes[0].axis("off")
-        
-        # 4.2 Evaluar la imagen en los 3 modelos
+
         for j, config_mod in enumerate(modelos_cargados):
             modelo_actual = config_mod["modelo"]
             capa = config_mod["capa"]
             size = config_mod["target_size"]
             nombre = config_mod["nombre"]
-            
-            # Preparar imagen para este modelo concreto
+
             img_raw = load_img(img_path, target_size=size)
             img_array = np.expand_dims(img_to_array(img_raw), axis=0).copy()
-            
+
             modelo_actual.layers[-1].activation = None
-            
+
             try:
                 heatmap, pred_index, raw_preds = make_gradcam_heatmap(img_array, modelo_actual, capa)
                 modelo_actual.layers[-1].activation = tf.keras.activations.softmax
-                
+
                 pred_index_int = int(pred_index)
                 class_pred_name = CLASS_NAMES.get(pred_index_int, f"Indice_{pred_index_int}")
                 prob_pct = float(tf.nn.softmax(raw_preds)[pred_index_int]) * 100
-                
-                # Obtener la imagen coloreada y pintarla en su panel
+
                 img_heatmap = get_superimposed_img(img_path, heatmap)
                 axes[j+1].imshow(img_heatmap)
                 axes[j+1].set_title(f"{nombre}\nPred: {class_pred_name} [{prob_pct:.1f}%]", fontsize=14)
                 axes[j+1].axis("off")
-                
+
             except Exception as e:
                 axes[j+1].text(0.5, 0.5, f"Error:\n{str(e)}", ha='center', va='center')
                 axes[j+1].axis("off")
-                
-        # Guardar la tira completa de 4 imágenes
+
         output_filename = f"comparativa_{i+1:02d}_{img_name}"
         target_path = os.path.join(class_output_dir, output_filename)
         
