@@ -1,0 +1,28 @@
+Entornos virtuales y configuraciones locales
+
+venv/
+env/
+.env
+.vscode/
+
+Basura de Python y Jupyter
+
+pycache/
+*.py[cod]
+*$py.class
+.ipynb_checkpoints/
+
+Bases de datos temporales (¡Muy importante no subir esto!)
+
+produccion_planta.db
+
+Datasets masivos (Excluimos todo data/ salvo las imágenes de muestra)
+
+data/*
+!data/sample_images/
+!data/README_data.md
+
+Archivos de SO
+
+.DS_Store
+Thumbs.db
