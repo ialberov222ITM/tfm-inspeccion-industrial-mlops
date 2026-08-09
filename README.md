@@ -25,15 +25,15 @@ Para ejecutar la inferencia local con la red principal del estudio (**ResNet50**
 ## 📂 Estructura del Repositorio
 
     ├── data/
-    │   └── sample_images/          # Muestra representativa de imágenes sintéticas para pruebas locales
+    �?  └── sample_images/          # Muestra representativa de imágenes sintéticas para pruebas locales
     ├── models/                     # Directorio destinado a alojar los pesos .keras (descargar externamente)
     ├── notebooks/                  # Cuadernos Jupyter con EDA, Data Augmentation y entrenamiento
-    │   ├── EDA_y_Augmentation.ipynb
-    │   └── Entrenamiento_Comparativo.ipynb  # ResNet50, MobileNetV2, EfficientNetB0 (HTML sin warnings)
+    �?  ├── EDA_y_Augmentation.ipynb
+    �?  └── Entrenamiento_Comparativo.ipynb  # ResNet50, MobileNetV2, EfficientNetB0 (HTML sin warnings)
     ├── results/                    # Evidencias visuales de rendimiento (Matrices de Confusión y Grad-CAM)
     ├── src/                        # Código fuente principal de producción
-    │   ├── app_planta_industrial.py         # Aplicación MLOps (Gemelo Digital) desarrollada en Streamlit
-    │   └── gradcam_autocalibrado.py         # Script automatizado para auditoría visual y explicabilidad en lote
+    �?  ├── app_planta_industrial.py         # Aplicación MLOps (Gemelo Digital) desarrollada en Streamlit
+    �?  └── gradcam_autocalibrado.py         # Script automatizado para auditoría visual y explicabilidad en lote
     ├── requirements.txt            # Dependencias del proyecto
     └── README.md
 
@@ -55,7 +55,7 @@ Para ejecutar la inferencia local con la red principal del estudio (**ResNet50**
 
 4. **Ejecuta el simulador de planta industrial:**
 
-    streamlit run src/app_planta_industrial.py
+    streamlit run src/05_app_planta_industrial.py
 
 ---
 
