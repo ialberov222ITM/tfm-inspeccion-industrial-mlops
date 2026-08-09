@@ -266,19 +266,7 @@ def load_classification_model(model_path):
 
 @st.cache_resource
 def construir_grad_model(nombre_modelo):
-    """Construye UNA SOLA VEZ (cacheado) el sub-modelo de Grad-CAM de `nombre_modelo`: expone
-    a la vez el mapa de activaciones de su última capa convolucional y sus logits (sin softmax)
-    de salida.
-
-    IMPORTANTE: grad_model comparte la MISMA capa final que `modelo` (no es una copia), y Keras
-    relee `layer.activation` en cada forward pass real, no la "congela" al construir el modelo.
-    Por eso aquí NO se restaura la activación tras construir grad_model: si se restaurase,
-    cada llamada posterior a grad_model(...) volvería a aplicar softmax dentro del modelo, y
-    luego el código de fuera aplicaría softmax OTRA VEZ para calcular `confianza` — softmax
-    aplicado dos veces aplana la distribución y falsea la confianza mostrada (la hace bajar
-    muy por debajo del valor real, ej. de ~99% a ~40%). Dejar la activación a None de forma
-    permanente aquí es seguro porque `modelo` solo se usa a través de grad_model en esta app
-    (en ningún sitio se llama a modelo.predict() directamente)."""
+    """Construye UNA SOLA VEZ (cacheado) el sub-modelo de Grad-CAM que devuelve logits puros."""
     modelo = modelos_cargados.get(nombre_modelo)
     if modelo is None:
         return None
@@ -318,6 +306,7 @@ def make_gradcam_heatmap(img_array, grad_model):
     """Calcula el mapa de calor matemático de los gradientes (Grad-CAM real) usando un
     grad_model ya construido de antemano (ver construir_grad_model) — no muta ningún
     modelo compartido en cada llamada."""
+    img_array = tf.cast(img_array, tf.float32)
     with tf.GradientTape() as tape:
         last_conv_layer_output, preds = grad_model(img_array)
         pred_index = tf.argmax(preds[0])
@@ -329,7 +318,8 @@ def make_gradcam_heatmap(img_array, grad_model):
     last_conv_layer_output = last_conv_layer_output[0]
     heatmap = last_conv_layer_output @ pooled_grads[..., tf.newaxis]
     heatmap = tf.squeeze(heatmap)
-    heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
+    heatmap_max = tf.math.reduce_max(heatmap)
+    heatmap = tf.cond(heatmap_max > 0, lambda: tf.maximum(heatmap, 0) / heatmap_max, lambda: tf.maximum(heatmap, 0))
 
     return heatmap.numpy(), int(pred_index.numpy()), preds[0]
 
