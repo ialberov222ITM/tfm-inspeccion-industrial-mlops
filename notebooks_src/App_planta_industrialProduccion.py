@@ -380,13 +380,15 @@ def construir_grad_model(nombre_modelo):
 
 @st.cache_data
 def listar_imagenes_dataset():
-    """Indexa una sola vez las imágenes reales de validación disponibles como 'piezas entrantes',
-    separadas en dos pools (normales vs. con defecto) según su carpeta (etiqueta real). Esta
-    separación es la que permite al slider de tasa de defectos controlar qué proporción de
-    piezas entrantes son realmente defectuosas."""
+    """Indexa una sola vez las imágenes disponibles como 'piezas entrantes',
+    separadas en dos pools (normales vs. con defecto) según su carpeta (etiqueta real).
+    Intenta con dataset masivo primero, fallback a dataset de muestra si no existe."""
     imagenes_normales, imagenes_defecto = [], []
+
+    ruta_a_buscar = DATASET_PATH if os.path.exists(DATASET_PATH) else os.path.join(BASE_DIR, "data", "sample_images")
+
     for ext in ('*.jpg', '*.jpeg', '*.png'):
-        for ruta in glob.glob(os.path.join(DATASET_PATH, "**", ext), recursive=True):
+        for ruta in glob.glob(os.path.join(ruta_a_buscar, "**", ext), recursive=True):
             carpeta = os.path.basename(os.path.dirname(ruta)).lower()
             if carpeta == 'normal':
                 imagenes_normales.append(ruta)
