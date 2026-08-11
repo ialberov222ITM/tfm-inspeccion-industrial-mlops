@@ -37,12 +37,16 @@ st.markdown("""
 <style>
     /* --- Contenido principal --- */
     .main .block-container {
-        padding-top: 3.75rem;
-        padding-bottom: 1.5rem;
+        padding-top: 0.5rem;
+        padding-bottom: 1rem;
     }
     .main h1 {
         font-size: 2.4rem !important;
-        margin-bottom: 0.2rem !important;
+        margin-bottom: 0rem !important;
+        margin-top: 0rem !important;
+    }
+    .main [data-testid="stVerticalBlockBorderWrapper"] {
+        margin: 0rem !important;
     }
     .main h3 {
         font-size: 1.8rem !important;
@@ -221,8 +225,10 @@ if 'ultima_pieza_global' not in st.session_state:
 
 if 'tiempo_inicio_simulacion' not in st.session_state:
     st.session_state.tiempo_inicio_simulacion = None
-st.sidebar.title("🏭 Navegación MLOps")
-st.sidebar.markdown("Selecciona el módulo a visualizar:")
+st.sidebar.title("🏭 Gemelo Digital: Inspección de Calidad en Superficies Metálicas")
+st.sidebar.caption("🚀 Prototipo MLOps y Visión Artificial (Trabajo de Fin de Máster)")
+st.sidebar.divider()
+st.sidebar.markdown("**Selecciona el módulo a visualizar:**")
 pagina = st.sidebar.radio("Módulos", ["Simulador de Planta (En Vivo)", "Dashboard de Resultados", "Inspección Manual (Subir Imagen)"])
 
 st.sidebar.divider()
