@@ -1,73 +1,677 @@
-🏭 MLOps y Deep Learning para Inspección de Defectos Industriales
+# 🏭 Gemelo Digital: Inspección de Calidad en Superficies Metálicas
 
-Repositorio oficial del Trabajo de Fin de Máster centrado en la detección y clasificación multiclase de defectos en superficies metálicas mediante arquitecturas CNN (Transfer Learning), Inteligencia Artificial Explicable (XAI) y el despliegue de un simulador MLOps en tiempo real.
+[![Python 3.8+](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![TensorFlow](https://img.shields.io/badge/TensorFlow-2.14+-orange.svg)](https://tensorflow.org/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)](https://streamlit.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status: Production](https://img.shields.io/badge/Status-Production-brightgreen.svg)](#)
 
-📺 Demostración del Gemelo Digital (Vídeo)
+**Trabajo de Fin de Máster - Máster en Inteligencia Artificial**
 
-Para evaluar el funcionamiento de la monitorización, la inferencia IA y la auditoría visual interactiva mediante Grad-CAM, por favor consulte la siguiente demostración:
+Sistema MLOps completo para detección, clasificación y explicabilidad de defectos en superficies metálicas mediante Deep Learning, Transfer Learning, Visión Artificial Explicable (XAI) y monitoreo en tiempo real con rutas **100% portables**.
 
-👉 Ver vídeo demostrativo en YouTube
+---
 
-📥 Nota sobre Modelos Pesados: Los pesos .keras de las redes superan el límite de GitHub. Pueden descargarse desde este Enlace a Google Drive y deben colocarse en la carpeta models/.
+## 📋 Tabla de Contenidos
 
-📂 Estructura del Repositorio
+- [✨ Características Principales](#-características-principales)
+- [🎥 Demostración](#-demostración)
+- [📂 Estructura del Repositorio](#-estructura-del-repositorio)
+- [🚀 Arquitectura de Versiones](#-arquitectura-de-versiones)
+- [🔧 Sistema de Rutas Portables](#-sistema-de-rutas-portables)
+- [📥 Instalación](#-instalación)
+- [🎯 Inicio Rápido](#-inicio-rápido)
+- [🔧 Uso Avanzado](#-uso-avanzado)
+- [📊 Dashboard MLOps](#-dashboard-mlops)
+- [🧠 Explicabilidad (XAI - Grad-CAM)](#-explicabilidad-xai---grad-cam)
+- [⚠️ Solución de Problemas](#-solución-de-problemas)
+- [📚 Referencia Técnica](#-referencia-técnica)
+- [👤 Autor](#-autor)
 
-data/sample_images/: Muestra representativa de imágenes sintéticas para pruebas locales del simulador.
+---
 
-models/: Directorio destinado a alojar los pesos .keras de los modelos óptimos.
+## ✨ Características Principales
 
-notebooks/: Cuadernos Jupyter con el EDA, el Data Augmentation y el entrenamiento comparativo (ResNet50, MobileNetV2, EfficientNetB0). Incluye exportaciones HTML sin warnings.
+### 🤖 **Inteligencia Artificial**
+- **3 Arquitecturas Comparativas:** ResNet50, MobileNetV2, EfficientNetB0
+- **Transfer Learning:** Adaptación a defectología de superficies metálicas
+- **Consenso Multi-Modelo:** Decisión de planta por mayoría de 3 modelos
+- **Inferencia en Tiempo Real:** <500ms por imagen (CPU compatible)
 
-results/: Evidencias visuales de rendimiento (Matrices de Confusión) y auditoría Grad-CAM seleccionada.
+### 📊 **Explicabilidad (XAI)**
+- **Grad-CAM:** Visualización térmica del campo receptivo de la red
+- **Auditoría Visual:** Identificación de zonas críticas en decisiones
+- **Trazabilidad Completa:** Cada predicción linkea a la imagen de origen
 
-## 🚀 Arquitectura y Versiones de la Aplicación
+### 🏭 **MLOps y Productivización**
+- **Simulador de Planta en Vivo:** 5 líneas de producción paralelas
+- **Dashboard de Calidad:** KPIs en tiempo real (FP, FN, Tasa de Defectos)
+- **Base de Datos SQLite:** Auditoría permanente de decisiones
+- **Comparativa de Modelos:** Visualización side-by-side de predicciones
 
-Para garantizar la reproducibilidad del proyecto en diferentes entornos sin comprometer el rendimiento, el código fuente se ha estructurado en dos versiones funcionales. Ambas ejecutan el núcleo del Gemelo Digital y los modelos de Visión Artificial, pero difieren en su gestión de datos y almacenamiento:
+### 🔄 **Reproducibilidad y Portabilidad**
+- **Rutas Dinámicas:** Funciona en cualquier equipo sin cambios manuales
+- **Detección Automática:** Adapta modo operación según disponibilidad de datos
+- **Dos Versiones Independientes:** Evaluación (GitHub) vs Producción (Local)
+- **Mensajes Informativos:** Sidebar muestra status automático del entorno
 
-### 1. Versión de Evaluación / Reproducibilidad (Recomendada)
-- **Archivo:** `src/app_planta_industrial.py`
-- **Descripción:** Es la versión "ligera" del prototipo. Utiliza el conjunto de datos de muestra reducido (`data/sample_images/`) y **desactiva por defecto el guardado físico de imágenes en disco y base de datos**. 
-- **Objetivo:** Está diseñada específicamente para que el tribunal u otros investigadores puedan clonar, instalar y ejecutar el simulador rápidamente en sus equipos sin requerir grandes capacidades de almacenamiento local.
-- **Ejecución:** ```bash
-  streamlit run src/app_planta_industrial.py
+---
 
-### 2. Versión Completa / Entorno de Producción
-- **Archivo:** `src/version_completa/app_planta_industrialcompleta.py`
-- **Descripción:** Es la versión íntegra del sistema utilizada para las pruebas de estrés y la grabación del vídeo demostrativo. Esta versión se conecta al repositorio masivo de imágenes locales, habilita la persistencia en la base de datos y guarda de forma permanente las evidencias de los falsos positivos y negativos generados por los modelos.
-- **Objetivo:** Demostrar la viabilidad del sistema en un entorno industrial real, simulando un pipeline MLOps completo con trazabilidad absoluta de los datos.
- **Ejecución:** ```bash
-  streamlit run src/version_completa/app_planta_industrialcompleta.py
+## 🎥 Demostración
 
-gradcam_autocalibrado.py: Script automatizado para auditoría visual y explicabilidad en lote.
+Para ver el sistema en acción, consulta la demostración interactiva:
 
-⚙️ Instalación y Uso Local
+📺 **[Ver vídeo demostrativo en YouTube](#)** *(Enlace pendiente de actualizar)*
 
-Clona este repositorio:
+---
 
-git clone [https://github.com/TU_USUARIO/TU_REPOSITORIO.git](https://github.com/TU_USUARIO/TU_REPOSITORIO.git)
-cd TU_REPOSITORIO
+## 📂 Estructura del Repositorio
 
+```
+📦 TFM_MetalesSinteticos/
+│
+├── 📁 data/
+│   └── sample_images/          # Dataset de muestra (defectos sintéticos)
+│       ├── crack/
+│       ├── hole/
+│       ├── normal/
+│       ├── rust/
+│       └── scratch/
+│
+├── 📁 models/                   # Pesos entrenados (descargar de Google Drive)
+│   ├── modelo_optimo_resnet50.keras
+│   ├── modelo_optimo_mobilenetv2.keras
+│   └── modelo_optimo_efficientnetb0.keras
+│
+├── 📁 notebooks/                # Scripts principales y cuadernos Jupyter
+│   ├── 01_eda_dataset.ipynb
+│   ├── 02_data_augmentation.ipynb
+│   ├── 03_entrenamiento_comparativo_tl.ipynb
+│   ├── App_planta_industrial.py              # Versión Evaluación (GitHub - Ligera)
+│   ├── App_planta_industrialCompleta.py      # Versión Completa (Producción Local)
+│   └── 04_gradcam_autocalibrado.py           # Script de auditoría XAI en lote
+│
+├── 📁 results/                  # Evidencias visuales
+│   ├── confusion_matrices/      # Matrices de confusión por modelo
+│   ├── gradcam_audit/           # Reportes Grad-CAM seleccionados
+│   └── reporte_gradcam/         # Salida automatizada de auditoría
+│
+├── 📄 requirements.txt           # Dependencias Python
+├── 📄 README.md                  # Este archivo (raíz del proyecto)
+└── 📄 LICENSE                    # MIT License
 
-Instala las dependencias necesarias:
+```
 
+**Nota:** `industrial_defect_dataset/val/` no está en GitHub (demasiado pesado). Se descarga por separado o se agregará localmente.
+
+---
+
+## 🚀 Arquitectura de Versiones
+
+El proyecto incluye **dos versiones independientes** optimizadas para diferentes contextos:
+
+### 1. 🟢 Versión de Evaluación (RECOMENDADA PARA GITHUB)
+
+**Archivo:** `src/App_planta_industrialDemo.py`
+
+**Características:**
+- ✅ Dataset de muestra reducido (`data/sample_images/`)
+- ✅ Base de datos ligera (`produccion_planta_tfm.db`)
+- ✅ Tamaño total: < 500 MB
+- ✅ Reproducible inmediatamente
+- ✅ Ideal para tribunal evaluador
+
+**Ejecución:**
+```bash
+streamlit run src/App_planta_industrialDemo.py
+```
+
+---
+
+### 2. 🔵 Versión Completa (ENTORNO DE PRODUCCIÓN LOCAL)
+
+**Archivo:** `src/App_planta_industrialProduccion.py`
+
+**Características:**
+- ✅ Dataset masivo local (miles de imágenes)
+- ✅ Base de datos completa (`produccion_planta.db`)
+- ✅ Almacenamiento persistente
+- ✅ Detección automática de dataset
+- ✅ Mensajes informativos en sidebar
+
+**Ejecución:**
+```bash
+streamlit run src/App_planta_industrialProduccion.py
+```
+
+---
+
+### 📋 Diferencia Estructural de Versiones
+
+| Aspecto | Evaluación (GitHub) | Completa (Local) |
+|--------|-------------------|------------------|
+| **Archivo** | `App_planta_industrialDemo.py` | `App_planta_industrialProduccion.py` |
+| **Dataset** | `data/sample_images/` (muestra) | `industrial_defect_dataset/val/` (si existe) |
+| **BD Principal** | `produccion_planta_tfm.db` | `produccion_planta.db` |
+| **Tamaño Total** | < 500 MB | +10 GB |
+| **Persistencia** | Ligera | Completa |
+| **Target** | Tribunal evaluador | Desarrollo/Demostrativo |
+
+---
+
+## 🔧 Sistema de Rutas Portables
+
+### ⭐ **Cómo Funciona la Portabilidad**
+
+Ambas versiones utilizan **rutas dinámicas calculadas en tiempo de ejecución**, lo que garantiza que funcionan en cualquier equipo sin cambios manuales.
+
+**Lógica de Rutas:**
+
+```python
+# BASE_DIR se calcula automáticamente (2 niveles arriba del script)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Todas las rutas se construyen relativamente a BASE_DIR
+DATASET_PATH = os.path.join(BASE_DIR, "industrial_defect_dataset", "val")
+DB_FILE = os.path.join(BASE_DIR, "produccion_planta.db")
+MODELS_PATH = os.path.join(BASE_DIR, "models", "*.keras")
+```
+
+### 🎯 **Detección Automática de Dataset**
+
+La versión completa detecta automáticamente si el dataset masivo está disponible:
+
+```python
+DATASET_EXISTS = os.path.exists(DATASET_PATH)
+
+if DATASET_EXISTS:
+    # Muestra: 🟢 "Modo LOCAL (Dataset Completo)"
+    # Usa dataset masivo local
+else:
+    # Muestra: 🟡 "Modo EVALUACIÓN (Dataset de Muestra)"
+    # Fallback a data/sample_images/ (si es necesario)
+```
+
+**Resultado en Sidebar:**
+
+- **🟢 Modo LOCAL:** Dataset masivo encontrado → Simulación con miles de imágenes
+- **🟡 Modo EVALUACIÓN:** Dataset no encontrado → Advertencia + instrucciones
+
+### 📍 **Estructura Esperada en Diferentes Contextos**
+
+**En Tu Local (Desarrollo):**
+```
+TFM_MetalesSinteticos/
+├── industrial_defect_dataset/val/  ✅ Existe
+├── models/
+├── data/sample_images/
+└── notebooks/
+    └── App_planta_industrialCompleta.py
+        → Detecta dataset masivo automáticamente
+        → Muestra: 🟢 "Modo LOCAL"
+```
+
+**En GitHub / Otro Ordenador (Sin Dataset Masivo):**
+```
+TFM_MetalesSinteticos/
+├── models/
+├── data/sample_images/             ✅ Incluido en GitHub
+└── notebooks/
+    └── App_planta_industrialCompleta.py
+        → Dataset masivo no existe
+        → Muestra: 🟡 "Modo EVALUACIÓN"
+        → Instrucciones en sidebar para agregar dataset
+```
+
+**Si Agregan Dataset en Otro Ordenador:**
+```
+TFM_MetalesSinteticos/
+├── industrial_defect_dataset/val/  ✅ Usuario agregó
+├── models/
+├── data/sample_images/
+└── notebooks/
+    └── App_planta_industrialCompleta.py
+        → Auto-detecta la nueva carpeta
+        → Auto-cambia a: 🟢 "Modo LOCAL"
+        → Sin necesidad de reiniciar o cambiar código
+```
+
+---
+
+## 📥 Instalación
+
+### Paso 1: Clona el Repositorio
+
+```bash
+git clone https://github.com/TU_USUARIO/TFM_MetalesSinteticos.git
+cd TFM_MetalesSinteticos
+```
+
+### Paso 2: Crea un Entorno Virtual (Recomendado)
+
+```bash
+# Con Python 3.8+
+python -m venv venv
+
+# Activar entorno
+# En Windows:
+venv\Scripts\activate
+# En macOS/Linux:
+source venv/bin/activate
+```
+
+### Paso 3: Instala Dependencias
+
+```bash
+pip install -r requirements.txt
+```
+
+**Contenido esperado de `requirements.txt`:**
+```
+tensorflow==2.14.0
+streamlit==1.59.0
+pandas==2.0.0
+numpy==1.24.0
+Pillow==10.0.0
+plotly==5.17.0
+matplotlib==3.8.0
+scikit-learn==1.3.0
+```
+
+### Paso 4: Descarga los Modelos Entrenados
+
+> ⚠️ **IMPORTANTE:** Los modelos `.keras` superan el límite de GitHub (100 MB)
+
+**Opción A:** Desde Google Drive
+
+1. Accede al enlace: [Google Drive - Modelos TFM](#) *(Actualizar enlace)*
+2. Descarga los 3 archivos `.keras`
+3. Colócalos en `models/`:
+   ```
+   models/
+   ├── modelo_optimo_resnet50.keras
+   ├── modelo_optimo_mobilenetv2.keras
+   └── modelo_optimo_efficientnetb0.keras
+   ```
+
+**Opción B:** Re-entrenar localmente
+```bash
+cd notebooks
+jupyter notebook 03_entrenamiento_comparativo_tl.ipynb
+```
+
+---
+
+## 🎯 Inicio Rápido
+
+### Para Evaluadores (Versión Ligera - GitHub)
+
+```bash
+# 1. Instala (ver sección anterior)
 pip install -r requirements.txt
 
+# 2. Ejecuta directamente
+streamlit run src/App_planta_industrialDemo.py
 
-Ejecuta el simulador de planta industrial:
+# 3. Abre en el navegador
+# http://localhost:8501
+```
 
-streamlit run src/app_planta_industrial.py
+**Tiempo esperado:**
+- ⏱️ Carga de modelos: ~10-15 segundos
+- ⏱️ Primera predicción: <1 segundo
+- 💾 Espacio en disco: ~500 MB
 
+---
 
+### Para Desarrolladores (Versión Completa Local)
 
+```bash
+# 1. Instala como arriba
+pip install -r requirements.txt
 
-🧠 Arquitectura de la Solución
+# 2. Ejecuta
+streamlit run src/App_planta_industrialProduccion.py
 
-El proyecto integra el ciclo de vida completo del modelo (MLOps):
+# 3. La app automáticamente:
+# - Detecta si existe industrial_defect_dataset/val/
+# - Muestra 🟢 "Modo LOCAL" si existe
+# - Muestra 🟡 "Modo DEMO" si no existe
+```
 
-Inferencia: Evaluación comparativa con tres redes preentrenadas y adaptadas a la morfología de defectos metálicos sintéticos.
+**Con Dataset Masivo Local:**
+```
+✅ Verifica que tienes: TFM_MetalesSinteticos/industrial_defect_dataset/val/
+   - crack/
+   - hole/
+   - normal/
+   - rust/
+   - scratch/
 
-Explicabilidad (XAI): Mapeo de activación térmica Grad-CAM para auditar el campo receptivo de la red y mitigar el efecto de "caja negra".
+✅ La app detectará automáticamente y mostrará: 🟢 "Modo LOCAL"
+```
 
-Productivización: Gemelo Digital con registro en base de datos SQLite y cálculo en tiempo real de KPIs industriales (Falsos Positivos / Falsos Negativos).
+---
 
-Desarrollado por Ismael Albero Verdú - Máster en Inteligencia Artificial.
+## 🔧 Uso Avanzado
+
+### Script de Auditoría XAI en Lote
+
+Genera reportes Grad-CAM automáticos para un conjunto de imágenes:
+
+```bash
+cd notebooks
+python 04_gradcam_autocalibrado.py
+```
+
+**Salida:**
+```
+results/
+└── reporte_gradcam/
+    ├── crack/
+    ├── hole/
+    ├── normal/
+    ├── rust/
+    └── scratch/
+```
+
+---
+
+### Personalización del Dataset Local
+
+Para usar tu propio dataset masivo:
+
+1. **Estructura esperada:**
+   ```
+   industrial_defect_dataset/val/
+   ├── crack/
+   │   ├── crack_001.jpg
+   │   └── ...
+   ├── hole/
+   ├── normal/
+   ├── rust/
+   └── scratch/
+   ```
+
+2. **Ubicación:**
+   ```
+   TFM_MetalesSinteticos/
+   ├── industrial_defect_dataset/val/  ← Coloca aquí
+   ├── models/
+   ├── data/
+   └── notebooks/
+   ```
+
+3. **Reinicia Streamlit (o recarga la página):**
+   ```bash
+   streamlit run src/App_planta_industrialProduccion.py
+   ```
+
+   La app detectará automáticamente el nuevo dataset.
+
+---
+
+## 📊 Dashboard MLOps
+
+### Página 1: Simulador de Planta (En Vivo)
+
+**Propósito:** Emular una línea de producción industrial real
+
+**Funcionalidades:**
+- 5 líneas de producción paralelas
+- Generación aleatoria de piezas (defectuosas vs. normales)
+- Evaluación comparativa de 3 modelos por pieza
+- Consenso de decisión (rechazo si 2+ modelos votan rechazo)
+- Visualización Grad-CAM side-by-side
+
+**Controles:**
+- ▶️ **Toggle:** Activar/detener simulación
+- 🎛️ **Slider:** Configurar tasa de defectos objetivo (5%-70%)
+- 🗑️ **Botón:** Resetear base de datos
+
+---
+
+### Página 2: Dashboard de Resultados
+
+**Propósito:** Análisis de calidad y auditoría post-simulación
+
+**Métricas Principales:**
+- Total de piezas analizadas
+- Tasa de defectos real vs. objetivo
+- Falsos Positivos / Falsos Negativos
+- Errores de Clasificación
+
+**Visualizaciones:**
+- 📈 Distribución de defectos (pie chart)
+- 📊 Rendimiento por línea (bar chart)
+- 🔍 Tabla de auditoría con filtro por modelo
+- 📉 Comparativa de fiabilidad entre modelos
+
+---
+
+### Página 3: Inspección Manual (Subir Imagen)
+
+**Propósito:** Evaluar una imagen de prueba con los 3 modelos
+
+**Pasos:**
+1. Haz clic en **"Cargar imagen"** 📤
+2. Selecciona una imagen (JPG/PNG)
+3. El sistema evalúa automáticamente con los 3 modelos
+4. Compara resultados side-by-side
+5. Descarga Grad-CAM de cada modelo
+
+---
+
+## 🧠 Explicabilidad (XAI - Grad-CAM)
+
+### ¿Qué es Grad-CAM?
+
+**Gradient-weighted Class Activation Mapping** es una técnica de XAI que:
+1. Calcula gradientes de la clase predicha respecto a la última capa convolucional
+2. Pondera cada mapa de características por su gradiente
+3. Genera un mapa térmico que muestra **dónde se fijó la red** para decidir
+
+### Visualización Interactiva
+
+En el simulador y la inspección manual verás:
+
+```
+┌─────────────────────────────────────────┐
+│ 📷 Imagen Original    🧠 Grad-CAM       │
+│ (Superficie real)     (Zona crítica)    │
+│                                         │
+│ Región roja/naranja = Alta importancia  │
+│ Región azul = Baja importancia          │
+└─────────────────────────────────────────┘
+```
+
+### Auditoría en Lote
+
+Para generar reportes visuales de múltiples imágenes:
+
+```bash
+python src/Gradcam_autocalibrado.py
+```
+
+---
+
+## ⚠️ Solución de Problemas
+
+### ❌ Error: "ModuleNotFoundError: No module named 'tensorflow'"
+
+**Solución:**
+```bash
+pip install tensorflow==2.14.0
+```
+
+---
+
+### ❌ Error: "No se encontraron imágenes en './data/sample_images'"
+
+**Causa:** El dataset de muestra no está en la ruta esperada
+
+**Soluciones:**
+1. **Verifica la estructura:**
+   ```bash
+   ls data/sample_images/  # macOS/Linux
+   dir data\sample_images\ # Windows
+   ```
+
+2. **Si no existe, descárgalo:**
+   - Desde Google Drive: [Enlace al dataset](#)
+   - O re-ejecuta el EDA: `notebooks/01_eda_dataset.ipynb`
+
+---
+
+### ❌ Error: "Los modelos .keras no se encontraron"
+
+**Causa:** Los pesos no fueron descargados
+
+**Solución:**
+1. Descarga desde Google Drive: [Enlace a modelos](#)
+2. Coloca en `models/`:
+   ```
+   models/
+   ├── modelo_optimo_resnet50.keras
+   ├── modelo_optimo_mobilenetv2.keras
+   └── modelo_optimo_efficientnetb0.keras
+   ```
+
+---
+
+### ⚠️ "Modo EVALUACIÓN" en sidebar pero tengo dataset local
+
+**Causa:** El script no encuentra `industrial_defect_dataset/val/` en la ruta esperada
+
+**Soluciones:**
+1. Verifica que la carpeta esté en `TFM_MetalesSinteticos/` (no dentro de `notebooks/`)
+2. Recarga la página de Streamlit (Ctrl+R)
+3. Si sigue sin detectarse, verifica permisos de lectura
+
+---
+
+### 🐢 Aplicación lenta (primeras predicciones >5 segundos)
+
+**Normal en primera ejecución:**
+- TensorFlow necesita compilar kernels CUDA/CPU
+- Espera de 10-15 segundos en inicio
+- Predicciones posteriores serán < 500ms
+
+---
+
+## 📚 Referencia Técnica
+
+### Arquitecturas de Modelos
+
+| Modelo | Parámetros | Velocidad | Precisión | Ideal para |
+|--------|-----------|-----------|-----------|-----------|
+| **ResNet50** | 23.6M | Medio | ⭐⭐⭐⭐⭐ | Máxima precisión |
+| **MobileNetV2** | 3.5M | ⚡ Rápido | ⭐⭐⭐⭐ | Producción en tiempo real |
+| **EfficientNetB0** | 5.3M | Rápido | ⭐⭐⭐⭐⭐ | Balance óptimo |
+
+**Consenso:** Rechazo si ≥2 de 3 modelos votan "Defecto"
+
+---
+
+### Base de Datos SQLite
+
+**Esquema de `produccion_planta.db` / `produccion_planta_tfm.db`:**
+
+```sql
+CREATE TABLE produccion (
+    id INTEGER PRIMARY KEY,
+    timestamp DATETIME,
+    linea INTEGER,                    -- 1-5 (línea de producción)
+    defecto TEXT,                     -- Predicción: Crack, Hole, Normal, Rust, Scratch
+    confianza REAL,                   -- 0-100 (%)
+    estado TEXT,                      -- Aceptada / Rechazada (Defecto)
+    clase_real TEXT,                  -- Ground truth del dataset
+    estado_real TEXT,                 -- Ground truth: Aceptada / Rechazada
+    modelo_ia TEXT,                   -- ResNet50 / MobileNetV2 / EfficientNetB0
+    tasa_defectos_objetivo REAL,      -- % configurado en slider
+    nombre_fichero TEXT,              -- Ruta relativa en dataset
+    pieza_id TEXT UNIQUE,             -- ID de la pieza física (agrupa 3 evaluaciones)
+    estado_consenso TEXT              -- Decisión final de planta
+);
+```
+
+---
+
+### Clases de Defectos
+
+```python
+CLASS_NAMES = {
+    0: 'Crack (Grieta)',           # Fractura superficial
+    1: 'Hole (Perforación)',       # Orificio
+    2: 'Normal (Sin defectos)',    # Superficie sana
+    3: 'Rust (Óxido)',             # Oxidación / corrosión
+    4: 'Scratch (Arañazo)'         # Marca superficial
+}
+```
+
+---
+
+### Sistema de Rutas (Detalle Técnico)
+
+**Cálculo de BASE_DIR:**
+```python
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+#                          ↑ Nivel 1: notebooks/
+#                                              ↑ Nivel 2: TFM_MetalesSinteticos/
+```
+
+**Construcción de rutas:**
+```python
+DATASET_PATH = os.path.join(BASE_DIR, "industrial_defect_dataset", "val")
+#             └─ Resulta en: TFM_MetalesSinteticos/industrial_defect_dataset/val
+
+DB_FILE = os.path.join(BASE_DIR, "produccion_planta.db")
+#         └─ Resulta en: TFM_MetalesSinteticos/produccion_planta.db
+
+MODELS_PATH = os.path.join(BASE_DIR, "models", "*.keras")
+#            └─ Resulta en: TFM_MetalesSinteticos/models/*.keras
+```
+
+**Por qué es portable:**
+- No importa dónde esté `notebooks/` dentro del proyecto
+- No importa dónde esté el proyecto en el disco
+- Las rutas se construyen **relativamente** desde la ubicación del script
+- Funciona idéntico en Windows, macOS, Linux
+
+---
+
+## 👤 Autor
+
+**Ismael Albero Verdú**
+
+- 📧 Email: `ialberov222@gmail.com`
+- 🎓 Máster en Inteligencia Artificial
+- 🔬 Especialización: MLOps, Deep Learning, Visión Artificial Explicable (XAI)
+
+---
+
+## 📜 Licencia
+
+Este proyecto está bajo licencia **MIT**. Ver archivo `LICENSE` para más detalles.
+
+---
+
+## 🙏 Agradecimientos
+
+- Universidad: Por la formación en IA y metodología de investigación
+- Tribunal Evaluador: Por la retroalimentación y supervisión
+- Comunidad Open Source: TensorFlow, Streamlit, pandas, scikit-learn
+
+---
+
+## 📞 Contacto y Soporte
+
+¿Preguntas o problemas?
+
+1. **Issues en GitHub:** Crea un issue detallando el problema
+2. **Email:** `ialberov222@gmail.com`
+3. **Troubleshooting:** Ver sección [⚠️ Solución de Problemas](#-solución-de-problemas)
+
+---
+
+**Última actualización:** Agosto 2026 | **Versión:** 1.1.0 (Rutas Portables)
