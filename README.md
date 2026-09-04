@@ -61,7 +61,7 @@ Sistema MLOps completo para detección, clasificación y explicabilidad de defec
 
 Para ver el sistema en acción, consulta la demostración interactiva:
 
-📺 **[Ver vídeo demostrativo en YouTube](#)** *(Enlace pendiente de actualizar)*
+📺 **[Ver vídeo demostrativo en YouTube](https://youtu.be/QClQ1FfFdSk)**
 
 ---
 
@@ -78,10 +78,10 @@ Para ver el sistema en acción, consulta la demostración interactiva:
 │       ├── rust/
 │       └── scratch/
 │
-├── 📁 models/                   # Pesos entrenados (descargar de Google Drive)
-│   ├── modelo_optimo_resnet50.keras
-│   ├── modelo_optimo_mobilenetv2.keras
-│   └── modelo_optimo_efficientnetb0.keras
+├── 📁 models/                   # Pesos entrenados
+│   ├── modelo_optimo_resnet50.keras       # Descargar de GitHub Releases (v1.0.0)
+│   ├── modelo_optimo_mobilenetv2.keras    # ✅ Incluido en repositorio
+│   └── modelo_optimo_efficientnetb0.keras # ✅ Incluido en repositorio
 │
 ├── 📁 notebooks/                # Scripts principales y cuadernos Jupyter
 │   ├── 01_eda_dataset.ipynb
@@ -280,19 +280,25 @@ scikit-learn==1.3.0
 
 ### Paso 4: Descarga los Modelos Entrenados
 
-> ⚠️ **IMPORTANTE:** Los modelos `.keras` superan el límite de GitHub (100 MB)
+> ⚠️ **IMPORTANTE:** Los modelos `.keras` son pesados (~350 MB combinados)
 
-**Opción A:** Desde Google Drive
+**Opción A:** Descargar desde GitHub Releases (Recomendado)
 
-1. Accede al enlace: [Google Drive - Modelos TFM](#) *(Actualizar enlace)*
-2. Descarga los 3 archivos `.keras`
-3. Colócalos en `models/`:
-   ```
-   models/
-   ├── modelo_optimo_resnet50.keras
-   ├── modelo_optimo_mobilenetv2.keras
-   └── modelo_optimo_efficientnetb0.keras
-   ```
+ResNet50 (archivo grande) se descarga desde GitHub Releases:
+```bash
+cd models
+# Descargar ResNet50 desde Releases
+wget https://github.com/ialberov222ITM/tfm-inspeccion-industrial-mlops/releases/download/v1.0.0/modelo_optimo_resnet50.keras
+cd ..
+```
+
+MobileNetV2 y EfficientNetB0 ya están incluidos en el repositorio:
+```
+models/
+├── modelo_optimo_resnet50.keras          # Descargar de Releases (arriba)
+├── modelo_optimo_mobilenetv2.keras       # ✅ Incluido en repositorio
+└── modelo_optimo_efficientnetb0.keras    # ✅ Incluido en repositorio
+```
 
 **Opción B:** Re-entrenar localmente
 ```bash
