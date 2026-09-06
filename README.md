@@ -83,13 +83,15 @@ Para ver el sistema en acción, consulta la demostración interactiva:
 │   ├── modelo_optimo_mobilenetv2.keras    # ✅ Incluido en repositorio
 │   └── modelo_optimo_efficientnetb0.keras # ✅ Incluido en repositorio
 │
-├── 📁 notebooks/                # Scripts principales y cuadernos Jupyter
+├── 📁 notebooks/                # Cuadernos Jupyter principales
 │   ├── 01_eda_dataset.ipynb
 │   ├── 02_data_augmentation.ipynb
-│   ├── 03_entrenamiento_comparativo_tl.ipynb
-│   ├── App_planta_industrial.py              # Versión Evaluación (GitHub - Ligera)
-│   ├── App_planta_industrialCompleta.py      # Versión Completa (Producción Local)
-│   └── 04_gradcam_autocalibrado.py           # Script de auditoría XAI en lote
+│   └── 03_entrenamiento_comparativo_tl.ipynb
+│
+├── 📁 src/                      # Ejecutables Streamlit y scripts de producción
+│   ├── App_planta_industrialDemo.py          # Versión Evaluación (GitHub - Ligera)
+│   ├── App_planta_industrialProduccion.py    # Versión Completa (Producción Local)
+│   └── Gradcam_autocalibrado.py              # Script de auditoría XAI en lote
 │
 ├── 📁 results/                  # Evidencias visuales
 │   ├── confusion_matrices/      # Matrices de confusión por modelo
@@ -205,8 +207,8 @@ TFM_MetalesSinteticos/
 ├── industrial_defect_dataset/val/  ✅ Existe
 ├── models/
 ├── data/sample_images/
-└── notebooks/
-    └── App_planta_industrialCompleta.py
+└── src/
+    └── App_planta_industrialProduccion.py
         → Detecta dataset masivo automáticamente
         → Muestra: 🟢 "Modo LOCAL"
 ```
@@ -216,8 +218,8 @@ TFM_MetalesSinteticos/
 TFM_MetalesSinteticos/
 ├── models/
 ├── data/sample_images/             ✅ Incluido en GitHub
-└── notebooks/
-    └── App_planta_industrialCompleta.py
+└── src/
+    └── App_planta_industrialProduccion.py
         → Dataset masivo no existe
         → Muestra: 🟡 "Modo EVALUACIÓN"
         → Instrucciones en sidebar para agregar dataset
@@ -229,8 +231,8 @@ TFM_MetalesSinteticos/
 ├── industrial_defect_dataset/val/  ✅ Usuario agregó
 ├── models/
 ├── data/sample_images/
-└── notebooks/
-    └── App_planta_industrialCompleta.py
+└── src/
+    └── App_planta_industrialProduccion.py
         → Auto-detecta la nueva carpeta
         → Auto-cambia a: 🟢 "Modo LOCAL"
         → Sin necesidad de reiniciar o cambiar código
@@ -366,8 +368,7 @@ streamlit run src/App_planta_industrialProduccion.py
 Genera reportes Grad-CAM automáticos para un conjunto de imágenes:
 
 ```bash
-cd notebooks
-python 04_gradcam_autocalibrado.py
+python src/Gradcam_autocalibrado.py
 ```
 
 **Salida:**
